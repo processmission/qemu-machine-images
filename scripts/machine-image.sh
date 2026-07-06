@@ -58,6 +58,29 @@ machine_image_download() {
     mv -- "${temporary}" "${output}"
 }
 
+machine_image_pad_to_power_of_two() {
+    local image="$1"
+    local size
+    local padded_size=1
+
+    machine_image_require_command stat
+    machine_image_require_command truncate
+
+    size="$(stat --format=%s -- "${image}")"
+    [[ "${size}" =~ ^[1-9][0-9]*$ ]] || \
+        machine_image_die "invalid image size for ${image}: ${size}"
+
+    while (( padded_size < size )); do
+        (( padded_size < 4611686018427387904 )) || \
+            machine_image_die "image is too large to pad: ${image}"
+        padded_size=$((padded_size * 2))
+    done
+
+    if (( padded_size != size )); then
+        truncate --size="${padded_size}" -- "${image}"
+    fi
+}
+
 machine_image_prepare() {
     if (( $# < 5 )); then
         machine_image_die \
