@@ -27,7 +27,12 @@ RUN make -C buildroot O=/workspace/output "${BUILDROOT_DEFCONFIG}"
 RUN --mount=type=cache,target=/home/br-user/.buildroot-dl,uid=1000,gid=1000,sharing=locked \
     make -C buildroot \
         O=/workspace/output \
-        BR2_DL_DIR=/home/br-user/.buildroot-dl
+        BR2_DL_DIR=/home/br-user/.buildroot-dl && \
+    rm -rf \
+        /workspace/output/build \
+        /workspace/output/host \
+        /workspace/output/staging \
+        /workspace/output/target
 
 FROM scratch AS export
 COPY --from=builder /workspace/output/images /images
