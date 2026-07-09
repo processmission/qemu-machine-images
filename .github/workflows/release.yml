@@ -103,6 +103,22 @@ jobs:
           echo "defconfig=${BUILDROOT_DEFCONFIG}" >> "${GITHUB_OUTPUT}"
           echo "asset_prefix=${RELEASE_ASSET_PREFIX}" >> "${GITHUB_OUTPUT}"
 
+      - name: Reclaim runner disk space
+        run: |
+          set -euo pipefail
+
+          df -h /
+          sudo rm -rf -- \
+              /opt/ghc \
+              /opt/hostedtoolcache/CodeQL \
+              /usr/local/.ghcup \
+              /usr/local/lib/android \
+              /usr/share/dotnet \
+              /usr/share/swift
+          sudo apt-get clean
+          docker system prune --all --force
+          df -h /
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
