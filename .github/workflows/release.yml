@@ -136,6 +136,10 @@ jobs:
           cache-from: type=gha,scope=${{ steps.machine.outputs.asset_prefix }}
           cache-to: type=gha,mode=max,scope=${{ steps.machine.outputs.asset_prefix }}
 
+      - name: Report disk space after build
+        if: always()
+        run: df -h /
+
       - name: Package release asset
         id: package
         env:
