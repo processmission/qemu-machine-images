@@ -24,7 +24,7 @@ machine_image_prepare \
     "${RELEASE_ASSET_PREFIX}" \
     "${REQUIRED_IMAGES[@]}"
 
-exec "${QEMU_EXECUTABLE}" \
+machine_image_exec "${QEMU_EXECUTABLE}" \
     -machine "${QEMU_MACHINE},msel=11" \
     -smp 5 \
     -m 8G \

@@ -10,6 +10,17 @@ machine_image_require_command() {
         machine_image_die "required command not found: $1"
 }
 
+machine_image_exec() {
+    (( $# > 0 )) || machine_image_die "machine_image_exec requires a command"
+
+    {
+        printf 'QEMU command:'
+        printf ' %q' "$@"
+        printf '\n'
+    } >&2
+    exec "$@"
+}
+
 machine_image_github_repository() {
     local repo_root="$1"
     local repository="${QEMU_MACHINE_IMAGES_REPOSITORY:-}"
