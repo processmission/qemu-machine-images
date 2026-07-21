@@ -1,0 +1,35 @@
+From bda7f259aac3e312cd526c93b433151743bf494b Mon Sep 17 00:00:00 2001
+From: Bin Meng <bin.meng@processmission.com>
+Date: Wed, 22 Jul 2026 20:16:00 +0800
+Subject: [PATCH] mpfs_hal: preserve DDR pattern-test parameters
+
+ddr_setup() retains its DDR training state across invocations,
+but keeps the associated pattern-test parameters in an automatic
+variable. The setup state initializes one instance and returns,
+while later states use new, uninitialized instances.
+
+Give the parameters static storage duration so that they remain
+valid throughout the DDR training state machine.
+
+Link: https://github.com/polarfire-soc/platform/issues/36
+Signed-off-by: Bin Meng <bin.meng@processmission.com>
+---
+ .../src/platform/mpfs_hal/common/nwc/mss_ddr.c                  | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/baremetal/polarfire-soc-bare-metal-library/src/platform/mpfs_hal/common/nwc/mss_ddr.c b/baremetal/polarfire-soc-bare-metal-library/src/platform/mpfs_hal/common/nwc/mss_ddr.c
+index 4e56f4bf..357c6f1f 100644
+--- a/baremetal/polarfire-soc-bare-metal-library/src/platform/mpfs_hal/common/nwc/mss_ddr.c
++++ b/baremetal/polarfire-soc-bare-metal-library/src/platform/mpfs_hal/common/nwc/mss_ddr.c
+@@ -374,7 +374,7 @@ static uint32_t ddr_setup(void)
+     uint32_t ret_status = 0U;
+     uint8_t number_of_lanes_to_calibrate;
+     uint64_t mem_size;
+-    volatile PATTERN_TEST_PARAMS pattern_test;
++    static volatile PATTERN_TEST_PARAMS pattern_test;
+ 
+     ddr_type = LIBERO_SETTING_DDRPHY_MODE & DDRPHY_MODE_MASK;
+ 
+-- 
+2.53.0
+

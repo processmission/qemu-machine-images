@@ -1,0 +1,33 @@
+# syntax=docker/dockerfile:1.7
+
+FROM microsemiproess/softconsole-headless-slim:7.0-2021.3 AS builder
+
+ARG HSS_URL=https://github.com/polarfire-soc/hart-software-services.git
+ARG HSS_REF=v2024.06
+
+# The release build needs the eNVM image, not an FPGA programming bitstream.
+# Satisfy mpfsBootmodeProgrammer's unconditional fpgenprog check in dry-run mode.
+ENV FPGENPROG=/bin/true
+
+WORKDIR /workspace
+
+RUN test -n "${HSS_URL}" || \
+        { echo 'HSS_URL build argument is required' >&2; exit 1; } && \
+    test -n "${HSS_REF}" || \
+        { echo 'HSS_REF build argument is required' >&2; exit 1; }
+
+RUN git init hss && \
+    git -C hss remote add origin "${HSS_URL}" && \
+    git -C hss fetch --depth 1 origin "${HSS_REF}" && \
+    git -C hss checkout --detach FETCH_HEAD
+
+COPY machine/riscv64/microchip-icicle-kit/0001-mpfs_hal-preserve-DDR-pattern-test-parameters.patch /tmp/hss.patch
+
+RUN git -C hss apply /tmp/hss.patch
+
+RUN cp hss/boards/mpfs-icicle-kit-es/def_config hss/.config && \
+    make -C hss -j"$(nproc)" BOARD=mpfs-icicle-kit-es && \
+    test -s hss/build/bootmode1/hss-envm-wrapper-bm1-p0.bin
+
+FROM scratch AS export
+COPY --from=builder /workspace/hss/build/bootmode1/hss-envm-wrapper-bm1-p0.bin /images/hss.bin

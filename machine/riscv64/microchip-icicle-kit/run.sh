@@ -35,7 +35,6 @@ machine_image_exec "${QEMU_EXECUTABLE}" \
     -monitor none \
     -serial null \
     -serial stdio \
-    -kernel "${MACHINE_IMAGE_DIR}/u-boot.bin" \
-    -dtb "${MACHINE_IMAGE_DIR}/mpfs-icicle-kit.dtb" \
+    -bios "${MACHINE_IMAGE_DIR}/hss.bin" \
     -drive "file=${MACHINE_IMAGE_DIR}/sdcard.img,if=sd,format=raw" \
     "$@"
