@@ -12,6 +12,7 @@ on:
       - machine/**
       - scripts/Dockerfile.buildroot
       - scripts/machine-image.sh
+      - scripts/package-machine-images.sh
 
 permissions:
   contents: read
@@ -143,7 +144,6 @@ jobs:
       - name: Package release asset
         id: package
         env:
-          ASSET_PREFIX: ${{ steps.machine.outputs.asset_prefix }}
           MACHINE_DIR: ${{ matrix.machine_dir }}
           RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
         run: |
@@ -152,24 +152,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes zstd
 
-          source "${MACHINE_DIR}/machine.conf"
-          test -d output/images
-          for image in "${REQUIRED_IMAGES[@]}"; do
-              test -f "output/images/${image}"
-          done
-
-          asset="${ASSET_PREFIX}-${RELEASE_TAG}.tar.zst"
-          mkdir -p dist
-          tar \
-              --create \
-              --use-compress-program="zstd -T0 -10" \
-              --file="dist/${asset}" \
-              --directory=output \
-              images
-          (
-              cd dist
-              sha256sum "${asset}" > "${asset}.sha256"
-          )
+          asset="$(
+              scripts/package-machine-images.sh \
+                  "${MACHINE_DIR}/machine.conf" \
+                  output \
+                  dist \
+                  "${RELEASE_TAG}"
+          )"
 
           echo "asset=${asset}" >> "${GITHUB_OUTPUT}"
 

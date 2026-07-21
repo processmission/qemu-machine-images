@@ -15,7 +15,8 @@ machines. Generated images are published as GitHub Release assets.
 │           └── run.sh
 └── scripts
     ├── Dockerfile.buildroot
-    └── machine-image.sh
+    ├── machine-image.sh
+    └── package-machine-images.sh
 ```
 
 The first directory below `machine/` is the QEMU architecture name. The next
@@ -45,12 +46,13 @@ Each supported machine has two release assets:
 <release-asset-prefix>-v<version>.tar.zst.sha256
 ```
 
-The checksum file uses the format emitted by `sha256sum`. The archive must
-contain the Buildroot output under a top-level `images/` directory:
+The checksum file uses the format emitted by `sha256sum`. The archive contains
+exactly the files listed in the machine's `REQUIRED_IMAGES` array under a
+top-level `images/` directory:
 
 ```text
 images/
-├── <machine-specific Buildroot output>
+├── <required machine image>
 └── ...
 ```
 
@@ -86,18 +88,16 @@ docker buildx build \
   .
 ```
 
-The following sifive_u example packages an existing Buildroot output directory
-while preserving the required top-level `images/` path:
+The following sifive_u example packages the required files from an existing
+Buildroot output directory:
 
 ```console
 version="$(tr -d '[:space:]' < VERSION)"
-asset="riscv64-sifive_u-v${version}.tar.zst"
-mkdir -p dist
-tar --create --use-compress-program=zstd \
-  --file="dist/${asset}" \
-  --directory="${BUILDROOT_OUTPUT}" \
-  images
-(cd dist && sha256sum "${asset}" > "${asset}.sha256")
+scripts/package-machine-images.sh \
+  machine/riscv64/sifive_u/machine.conf \
+  "${BUILDROOT_OUTPUT}" \
+  dist \
+  "v${version}"
 ```
 
 `BUILDROOT_OUTPUT` is the directory containing `images/`, not the `images/`
@@ -120,16 +120,17 @@ VERSION
 machine/**
 scripts/Dockerfile.buildroot
 scripts/machine-image.sh
+scripts/package-machine-images.sh
 ```
 
 Documentation-only changes, including changes to `README.md`, do not rebuild or
 republish the images.
 
 The workflow derives the fixed release tag `v1.0.0` from `VERSION`, builds
-every supported machine with `scripts/Dockerfile.buildroot`, packages each
-`images/` directory, and verifies its checksum. Only after every matrix
-build succeeds does it move the tag to the current commit and create or update
-the matching GitHub Release,
+every supported machine with `scripts/Dockerfile.buildroot`, packages its
+required images, and verifies the checksum. Only after every matrix build
+succeeds does it move the tag to the current commit and create or update the
+matching GitHub Release,
 replacing its `.tar.zst` and `.sha256` assets. This rolling-release model is not
 compatible with GitHub's immutable releases option.
 
