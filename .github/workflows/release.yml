@@ -10,7 +10,7 @@ on:
       - .github/workflows/release.yml
       - VERSION
       - machine/**
-      - scripts/Dockerfile
+      - scripts/Dockerfile.buildroot
       - scripts/machine-image.sh
 
 permissions:
@@ -128,7 +128,7 @@ jobs:
           DOCKER_BUILD_RECORD_UPLOAD: false
         with:
           context: .
-          file: scripts/Dockerfile
+          file: scripts/Dockerfile.buildroot
           target: export
           build-args: |
             BUILDROOT_DEFCONFIG=${{ steps.machine.outputs.defconfig }}

@@ -14,7 +14,7 @@ machines. Generated images are published as GitHub Release assets.
 │           ├── machine.conf
 │           └── run.sh
 └── scripts
-    ├── Dockerfile
+    ├── Dockerfile.buildroot
     └── machine-image.sh
 ```
 
@@ -66,7 +66,7 @@ Buildx:
 
 ```console
 docker buildx build \
-  --file scripts/Dockerfile \
+  --file scripts/Dockerfile.buildroot \
   --build-arg BUILDROOT_DEFCONFIG=hifive_unleashed_defconfig \
   --output type=local,dest=output \
   .
@@ -78,7 +78,7 @@ different Git repository when building from a fork or mirror:
 
 ```console
 docker buildx build \
-  --file scripts/Dockerfile \
+  --file scripts/Dockerfile.buildroot \
   --build-arg BUILDROOT_URL=https://example.com/buildroot.git \
   --build-arg BUILDROOT_REF=0123456789abcdef0123456789abcdef01234567 \
   --build-arg BUILDROOT_DEFCONFIG=hifive_unleashed_defconfig \
@@ -118,17 +118,18 @@ The workflow runs only when a push changes at least one of these paths:
 .github/workflows/release.yml
 VERSION
 machine/**
-scripts/Dockerfile
+scripts/Dockerfile.buildroot
 scripts/machine-image.sh
 ```
 
 Documentation-only changes, including changes to `README.md`, do not rebuild or
 republish the images.
 
-The workflow derives the fixed release tag `v1.0.0` from `VERSION`, builds every
-supported machine with `scripts/Dockerfile`, packages each `images/` directory,
-and verifies its checksum. Only after every matrix build succeeds does it move
-the tag to the current commit and create or update the matching GitHub Release,
+The workflow derives the fixed release tag `v1.0.0` from `VERSION`, builds
+every supported machine with `scripts/Dockerfile.buildroot`, packages each
+`images/` directory, and verifies its checksum. Only after every matrix
+build succeeds does it move the tag to the current commit and create or update
+the matching GitHub Release,
 replacing its `.tar.zst` and `.sha256` assets. This rolling-release model is not
 compatible with GitHub's immutable releases option.
 
