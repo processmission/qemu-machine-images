@@ -1,7 +1,8 @@
 # QEMU machine images
 
-This repository builds Buildroot images and provides small launchers for QEMU
-machines. Generated images are published as GitHub Release assets.
+This repository builds firmware and operating-system images and provides small
+launchers for QEMU machines. Generated images are published as GitHub Release
+assets.
 
 ## Repository layout
 
@@ -11,18 +12,22 @@ machines. Generated images are published as GitHub Release assets.
 ├── machine
 │   └── <qemu-architecture>
 │       └── <qemu-machine>
+│           ├── build.hcl
 │           ├── machine.conf
 │           └── run.sh
 └── scripts
-    ├── Dockerfile.buildroot
+    ├── Dockerfile.<project>
+    ├── assemble-machine-images.sh
+    ├── docker-bake.hcl
     ├── machine-image.sh
     └── package-machine-images.sh
 ```
 
 The first directory below `machine/` is the QEMU architecture name. The next
 directory identifies a QEMU machine. `machine.conf` is the common source of
-the architecture, QEMU machine name, Buildroot defconfig, release asset prefix
-and required images.
+the architecture, QEMU machine name, release asset prefix and required images.
+`build.hcl` selects the independently built components and supplies their
+machine-specific build arguments.
 
 Shared launcher code in `scripts/machine-image.sh` locates, downloads,
 verifies, and caches release images. Machine directories contain only their
@@ -88,6 +93,18 @@ docker buildx build \
   .
 ```
 
+Each machine's `build.hcl` inherits reusable component targets from
+`scripts/docker-bake.hcl`. Build and assemble all components declared by a
+machine with:
+
+```console
+docker buildx bake \
+  --file scripts/docker-bake.hcl \
+  --file machine/riscv64/sifive_u/build.hcl \
+  release-components
+scripts/assemble-machine-images.sh components output
+```
+
 The following sifive_u example packages the required files from an existing
 Buildroot output directory:
 
@@ -118,21 +135,19 @@ The workflow runs only when a push changes at least one of these paths:
 .github/workflows/release.yml
 VERSION
 machine/**
-scripts/Dockerfile.buildroot
-scripts/machine-image.sh
-scripts/package-machine-images.sh
+scripts/**
 ```
 
 Documentation-only changes, including changes to `README.md`, do not rebuild or
 republish the images.
 
-The workflow derives the fixed release tag `v1.0.0` from `VERSION`, builds
-every supported machine with `scripts/Dockerfile.buildroot`, packages its
-required images, and verifies the checksum. Only after every matrix build
-succeeds does it move the tag to the current commit and create or update the
-matching GitHub Release,
-replacing its `.tar.zst` and `.sha256` assets. This rolling-release model is not
-compatible with GitHub's immutable releases option.
+The workflow derives the fixed release tag `v1.0.0` from `VERSION`, discovers
+machines from their `build.hcl` files, builds and assembles their declared
+components, packages the required images, and verifies the checksum. Only
+after every matrix build succeeds does it move the tag to the current commit
+and create or update the matching GitHub Release, replacing its `.tar.zst` and
+`.sha256` assets. This rolling-release model is not compatible with GitHub's
+immutable releases option.
 
 ## Run a machine
 

@@ -10,9 +10,7 @@ on:
       - .github/workflows/release.yml
       - VERSION
       - machine/**
-      - scripts/Dockerfile.buildroot
-      - scripts/machine-image.sh
-      - scripts/package-machine-images.sh
+      - scripts/**
 
 permissions:
   contents: read
@@ -26,12 +24,60 @@ jobs:
     name: Prepare release
     runs-on: ubuntu-24.04
     outputs:
+      machine_matrix: ${{ steps.machines.outputs.machine_matrix }}
       version: ${{ steps.release.outputs.version }}
       release_tag: ${{ steps.release.outputs.release_tag }}
 
     steps:
       - name: Check out source
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Discover machine builds
+        id: machines
+        run: |
+          set -euo pipefail
+
+          declare -a build_files=()
+          mapfile -t build_files < <(
+              find machine \
+                  -mindepth 3 \
+                  -maxdepth 3 \
+                  -type f \
+                  -name build.hcl \
+                  -print | sort
+          )
+          if (( ${#build_files[@]} == 0 )); then
+              echo "no machine build.hcl files found" >&2
+              exit 1
+          fi
+
+          declare -a machine_dirs=()
+          for build_file in "${build_files[@]}"; do
+              machine_dir="${build_file%/build.hcl}"
+              if [[ ! "${machine_dir}" =~ ^machine/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+                  echo "invalid machine directory: ${machine_dir}" >&2
+                  exit 1
+              fi
+              if [[ ! -r "${machine_dir}/machine.conf" ]]; then
+                  echo "machine configuration is not readable: ${machine_dir}" >&2
+                  exit 1
+              fi
+              if [[ ! -x "${machine_dir}/run.sh" ]]; then
+                  echo "machine launcher is not executable: ${machine_dir}" >&2
+                  exit 1
+              fi
+              machine_dirs+=("${machine_dir}")
+          done
+
+          machine_matrix="$(
+              jq \
+                  --compact-output \
+                  --null-input \
+                  '$ARGS.positional' \
+                  --args \
+                  "${machine_dirs[@]}"
+          )"
+          echo "machine_matrix=${machine_matrix}" >> "${GITHUB_OUTPUT}"
 
       - name: Resolve release version
         id: release
@@ -56,9 +102,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_dir:
-          - machine/riscv64/microchip-icicle-kit
-          - machine/riscv64/sifive_u
+        machine_dir: ${{ fromJSON(needs.prepare.outputs.machine_matrix) }}
 
     steps:
       - name: Check out source
@@ -72,7 +116,6 @@ jobs:
           set -euo pipefail
 
           source "${MACHINE_DIR}/machine.conf"
-          : "${BUILDROOT_DEFCONFIG:?BUILDROOT_DEFCONFIG is required}"
           : "${RELEASE_ASSET_PREFIX:?RELEASE_ASSET_PREFIX is required}"
 
           if ! declare -p REQUIRED_IMAGES 2>/dev/null | grep -q '^declare -a '; then
@@ -84,10 +127,6 @@ jobs:
               exit 1
           fi
 
-          if [[ ! "${BUILDROOT_DEFCONFIG}" =~ ^[A-Za-z0-9_.-]+$ ]]; then
-              echo "invalid Buildroot defconfig: ${BUILDROOT_DEFCONFIG}" >&2
-              exit 1
-          fi
           if [[ ! "${RELEASE_ASSET_PREFIX}" =~ ^[A-Za-z0-9_.-]+$ ]]; then
               echo "invalid release asset prefix: ${RELEASE_ASSET_PREFIX}" >&2
               exit 1
@@ -101,7 +140,6 @@ jobs:
               esac
           done
 
-          echo "defconfig=${BUILDROOT_DEFCONFIG}" >> "${GITHUB_OUTPUT}"
           echo "asset_prefix=${RELEASE_ASSET_PREFIX}" >> "${GITHUB_OUTPUT}"
 
       - name: Reclaim runner disk space
@@ -123,23 +161,23 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
-      - name: Build Buildroot images
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+      - name: Build machine components
+        uses: docker/bake-action@d3418bd7d0e9324001bca92fa8ba175ea7e6dc9b # v7.3.0
         env:
           DOCKER_BUILD_RECORD_UPLOAD: false
         with:
-          context: .
-          file: scripts/Dockerfile.buildroot
-          target: export
-          build-args: |
-            BUILDROOT_DEFCONFIG=${{ steps.machine.outputs.defconfig }}
-          outputs: type=local,dest=output
-          cache-from: type=gha,scope=${{ steps.machine.outputs.asset_prefix }}
-          cache-to: type=gha,mode=max,scope=${{ steps.machine.outputs.asset_prefix }}
+          source: .
+          files: |
+            scripts/docker-bake.hcl
+            ${{ matrix.machine_dir }}/build.hcl
+          targets: release-components
 
       - name: Report disk space after build
         if: always()
         run: df -h /
+
+      - name: Assemble machine images
+        run: scripts/assemble-machine-images.sh components output
 
       - name: Package release asset
         id: package
