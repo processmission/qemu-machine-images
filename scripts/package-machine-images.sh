@@ -90,6 +90,7 @@ trap 'rm -f -- "${ARCHIVE_TEMPORARY}" "${CHECKSUM_TEMPORARY}"' EXIT
 
 tar \
     --create \
+    --sparse \
     --use-compress-program="zstd -T0 -10" \
     --file="${ARCHIVE_TEMPORARY}" \
     --directory="${OUTPUT_ROOT}" \

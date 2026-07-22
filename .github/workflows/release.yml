@@ -179,6 +179,16 @@ jobs:
       - name: Assemble machine images
         run: scripts/assemble-machine-images.sh components output
 
+      - name: Install image tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes gdisk zstd
+
+      - name: Finalize machine images
+        env:
+          MACHINE_DIR: ${{ matrix.machine_dir }}
+        run: scripts/finalize-machine-images.sh "${MACHINE_DIR}" output/images
+
       - name: Package release asset
         id: package
         env:
@@ -186,9 +196,6 @@ jobs:
           RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
         run: |
           set -euo pipefail
-
-          sudo apt-get update
-          sudo apt-get install --yes zstd
 
           asset="$(
               scripts/package-machine-images.sh \
