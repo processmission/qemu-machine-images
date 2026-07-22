@@ -24,9 +24,6 @@ machine_image_prepare \
     "${RELEASE_ASSET_PREFIX}" \
     "${REQUIRED_IMAGES[@]}"
 
-# QEMU's SD card model requires the image size to be a power of two.
-machine_image_pad_to_power_of_two "${MACHINE_IMAGE_DIR}/sdcard.img"
-
 machine_image_exec "${QEMU_EXECUTABLE}" \
     -machine "${QEMU_MACHINE}" \
     -smp 5 \
