@@ -20,6 +20,8 @@ assets.
     ├── assemble-machine-images.sh
     ├── docker-bake.hcl
     ├── machine-image.sh
+    ├── merge-functional-assets.sh
+    ├── package-functional-assets.sh
     └── package-machine-images.sh
 ```
 
@@ -67,9 +69,17 @@ images/
 └── ...
 ```
 
-The Buildroot version is independent of the repository release version. It is
-selected when building the container and can change without changing the
-directory or launcher contract.
+A machine may also define a `FUNCTIONAL_IMAGES` array. Those files are
+published individually for QEMU functional tests, using collision-free names:
+
+```text
+<release-asset-prefix>--<image-name>
+<release-asset-prefix>--SHA256SUMS
+```
+
+The component source versions are independent of the repository release
+version. They are pinned by each component recipe and can change without
+changing the directory or launcher contract.
 
 ## Build a machine image
 
@@ -162,6 +172,17 @@ Changes that only affect a launcher and consume the same released images do
 not require a revision update. A release-affecting change outside
 `build.hcl` must update the corresponding build specification in the same
 change.
+
+The K3 Pico-ITX definition builds the pinned SpacemiT SDK inputs and imports a
+hash-verified historical eweOS initramfs:
+
+```console
+docker buildx bake \
+  --file scripts/docker-bake.hcl \
+  --file machine/riscv64/k3-pico-itx/build.hcl \
+  release-components
+scripts/assemble-machine-images.sh components output
+```
 
 The following sifive_u example packages the required files from an existing
 Buildroot output directory:

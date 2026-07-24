@@ -1,0 +1,43 @@
+The SDK fork has SpacemiT-specific cache and mode-switch code in common SBI
+files.  Keep those includes and private CSR writes under the existing K3
+platform option so a generic architectural firmware can be built.
+
+diff --git a/lib/sbi/sbi_ecall_base.c b/lib/sbi/sbi_ecall_base.c
+index 907ee3b..e24f643 100644
+--- a/lib/sbi/sbi_ecall_base.c
++++ b/lib/sbi/sbi_ecall_base.c
+@@ -14,7 +14,9 @@
+ #include <sbi/sbi_trap.h>
+ #include <sbi/sbi_version.h>
+ #include <sbi/riscv_asm.h>
++#ifdef CONFIG_PLATFORM_SPACEMIT_K3
+ #include <sbi_utils/cache/cache.h>
++#endif
+ 
+ static int sbi_ecall_base_probe(unsigned long extid, unsigned long *out_val)
+ {
+diff --git a/lib/sbi/sbi_hart.c b/lib/sbi/sbi_hart.c
+index 14eb26b..20c0594 100644
+--- a/lib/sbi/sbi_hart.c
++++ b/lib/sbi/sbi_hart.c
+@@ -23,7 +23,9 @@
+ #include <sbi/sbi_string.h>
+ #include <sbi/sbi_trap.h>
+ #include <sbi/sbi_hfence.h>
++#ifdef CONFIG_PLATFORM_SPACEMIT_K3
+ #include <spacemit/k3/core_common.h>
++#endif
+ 
+ extern void __sbi_expected_trap(void);
+ extern void __sbi_expected_trap_hext(void);
+@@ -1090,8 +1092,10 @@ sbi_hart_switch_mode(unsigned long arg0, unsigned long arg1,
+ 		}
+ 	}
+ 
++#ifdef CONFIG_PLATFORM_SPACEMIT_K3
+ 	csr_write(CSR_TCMCFG, 1);
+ 	csr_set(CSR_MHCR, (1<<0));
++#endif
+ 
+ 	register unsigned long a0 asm("a0") = arg0;
+ 	register unsigned long a1 asm("a1") = arg1;

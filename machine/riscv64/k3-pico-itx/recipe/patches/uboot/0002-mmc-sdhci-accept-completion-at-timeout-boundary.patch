@@ -1,0 +1,35 @@
+From 94c0ff48276c5017313ef81f53681b58103281b2 Mon Sep 17 00:00:00 2001
+From: Chao Liu <chao.liu@processmission.com>
+Date: Tue, 14 Jul 2026 19:55:00 +0800
+Subject: [PATCH] mmc: sdhci: accept completion at timeout boundary
+
+The interrupt status can acquire all requested completion bits during the
+last status read at the timeout boundary.  Do not report -ETIMEDOUT when that
+read already proves the command completed.
+
+This matters for emulated controllers where a command-register write can
+perform enough synchronous DMA work for the command timer to cross its
+deadline before software reads the already-set completion bit.
+
+Signed-off-by: Chao Liu <chao.liu@processmission.com>
+---
+ drivers/mmc/sdhci.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/mmc/sdhci.c b/drivers/mmc/sdhci.c
+index ad9d7dfa03..cb3cdc8592 100644
+--- a/drivers/mmc/sdhci.c
++++ b/drivers/mmc/sdhci.c
+@@ -303,7 +303,8 @@ static int sdhci_send_command(struct mmc *mmc, struct mmc_cmd *cmd,
+ 		if (stat & SDHCI_INT_ERROR)
+ 			break;
+ 
+-		if (get_timer(start) >= SDHCI_READ_STATUS_TIMEOUT) {
++		if ((stat & mask) != mask &&
++		    get_timer(start) >= SDHCI_READ_STATUS_TIMEOUT) {
+ 			if (host->quirks & SDHCI_QUIRK_BROKEN_R1B) {
+ 				return 0;
+ 			} else {
+-- 
+2.50.1
+

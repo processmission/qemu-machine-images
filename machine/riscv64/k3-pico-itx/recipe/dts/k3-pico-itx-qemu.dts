@@ -1,0 +1,252 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/* Copyright (c) 2025 Spacemit, Inc */
+
+/dts-v1/;
+
+/ {
+    #address-cells = <2>;
+    #size-cells = <2>;
+    compatible = "spacemit,k3-pico-itx";
+    model = "SpacemiT K3 Pico-ITX (QEMU Linux-first subset)";
+
+    aliases {
+        serial0 = &uart0;
+    };
+
+    chosen {
+        stdout-path = "/soc/serial@d4017000:115200n8";
+
+        opensbi-config {
+            compatible = "opensbi,config";
+            cold-boot-harts = <&cpu0>;
+        };
+    };
+
+    cpus {
+        #address-cells = <1>;
+        #size-cells = <0>;
+        timebase-frequency = <24000000>;
+
+        cpu-map {
+            cluster0 {
+                core0 { cpu = <&cpu0>; };
+                core1 { cpu = <&cpu1>; };
+                core2 { cpu = <&cpu2>; };
+                core3 { cpu = <&cpu3>; };
+            };
+
+            cluster1 {
+                core0 { cpu = <&cpu4>; };
+                core1 { cpu = <&cpu5>; };
+                core2 { cpu = <&cpu6>; };
+                core3 { cpu = <&cpu7>; };
+            };
+        };
+
+        cpu0: cpu@0 {
+            compatible = "riscv";
+            device_type = "cpu";
+            reg = <0>;
+            status = "okay";
+            riscv,isa = "rv64imafdc_zicsr_zifencei_smaia_ssaia_sstc";
+            mmu-type = "riscv,sv48";
+            cpu0_intc: interrupt-controller {
+                #interrupt-cells = <1>;
+                compatible = "riscv,cpu-intc";
+                interrupt-controller;
+            };
+        };
+
+        cpu1: cpu@1 {
+            compatible = "riscv";
+            device_type = "cpu";
+            reg = <1>;
+            status = "okay";
+            riscv,isa = "rv64imafdc_zicsr_zifencei_smaia_ssaia_sstc";
+            mmu-type = "riscv,sv48";
+            cpu1_intc: interrupt-controller {
+                #interrupt-cells = <1>;
+                compatible = "riscv,cpu-intc";
+                interrupt-controller;
+            };
+        };
+
+        cpu2: cpu@2 {
+            compatible = "riscv";
+            device_type = "cpu";
+            reg = <2>;
+            status = "okay";
+            riscv,isa = "rv64imafdc_zicsr_zifencei_smaia_ssaia_sstc";
+            mmu-type = "riscv,sv48";
+            cpu2_intc: interrupt-controller {
+                #interrupt-cells = <1>;
+                compatible = "riscv,cpu-intc";
+                interrupt-controller;
+            };
+        };
+
+        cpu3: cpu@3 {
+            compatible = "riscv";
+            device_type = "cpu";
+            reg = <3>;
+            status = "okay";
+            riscv,isa = "rv64imafdc_zicsr_zifencei_smaia_ssaia_sstc";
+            mmu-type = "riscv,sv48";
+            cpu3_intc: interrupt-controller {
+                #interrupt-cells = <1>;
+                compatible = "riscv,cpu-intc";
+                interrupt-controller;
+            };
+        };
+
+        cpu4: cpu@4 {
+            compatible = "riscv";
+            device_type = "cpu";
+            reg = <4>;
+            status = "okay";
+            riscv,isa = "rv64imafdc_zicsr_zifencei_smaia_ssaia_sstc";
+            mmu-type = "riscv,sv48";
+            cpu4_intc: interrupt-controller {
+                #interrupt-cells = <1>;
+                compatible = "riscv,cpu-intc";
+                interrupt-controller;
+            };
+        };
+
+        cpu5: cpu@5 {
+            compatible = "riscv";
+            device_type = "cpu";
+            reg = <5>;
+            status = "okay";
+            riscv,isa = "rv64imafdc_zicsr_zifencei_smaia_ssaia_sstc";
+            mmu-type = "riscv,sv48";
+            cpu5_intc: interrupt-controller {
+                #interrupt-cells = <1>;
+                compatible = "riscv,cpu-intc";
+                interrupt-controller;
+            };
+        };
+
+        cpu6: cpu@6 {
+            compatible = "riscv";
+            device_type = "cpu";
+            reg = <6>;
+            status = "okay";
+            riscv,isa = "rv64imafdc_zicsr_zifencei_smaia_ssaia_sstc";
+            mmu-type = "riscv,sv48";
+            cpu6_intc: interrupt-controller {
+                #interrupt-cells = <1>;
+                compatible = "riscv,cpu-intc";
+                interrupt-controller;
+            };
+        };
+
+        cpu7: cpu@7 {
+            compatible = "riscv";
+            device_type = "cpu";
+            reg = <7>;
+            status = "okay";
+            riscv,isa = "rv64imafdc_zicsr_zifencei_smaia_ssaia_sstc";
+            mmu-type = "riscv,sv48";
+            cpu7_intc: interrupt-controller {
+                #interrupt-cells = <1>;
+                compatible = "riscv,cpu-intc";
+                interrupt-controller;
+            };
+        };
+    };
+
+    memory@102000000 {
+        device_type = "memory";
+        reg = <0x1 0x02000000 0x0 0x80000000>;
+    };
+
+    soc {
+        #address-cells = <2>;
+        #size-cells = <2>;
+        compatible = "simple-bus";
+        ranges;
+
+        clint@f1810000 {
+            compatible = "riscv,clint0";
+            reg = <0x0 0xf1810000 0x0 0x10000>;
+            interrupts-extended = <
+                &cpu0_intc 3 &cpu0_intc 7
+                &cpu1_intc 3 &cpu1_intc 7
+                &cpu2_intc 3 &cpu2_intc 7
+                &cpu3_intc 3 &cpu3_intc 7
+                &cpu4_intc 3 &cpu4_intc 7
+                &cpu5_intc 3 &cpu5_intc 7
+                &cpu6_intc 3 &cpu6_intc 7
+                &cpu7_intc 3 &cpu7_intc 7
+            >;
+        };
+
+        mimsic: interrupt-controller@f1000000 {
+            #interrupt-cells = <0>;
+            #msi-cells = <0>;
+            compatible = "riscv,imsics";
+            reg = <0x0 0xf1000000 0x0 0x10000>;
+            interrupt-controller;
+            msi-controller;
+            riscv,num-ids = <511>;
+            interrupts-extended = <
+                &cpu0_intc 11 &cpu1_intc 11
+                &cpu2_intc 11 &cpu3_intc 11
+                &cpu4_intc 11 &cpu5_intc 11
+                &cpu6_intc 11 &cpu7_intc 11
+            >;
+        };
+
+        simsic: interrupt-controller@e0400000 {
+            #interrupt-cells = <0>;
+            #msi-cells = <0>;
+            compatible = "riscv,imsics";
+            reg = <0x0 0xe0400000 0x0 0x400000>;
+            interrupt-controller;
+            msi-controller;
+            riscv,num-ids = <511>;
+            riscv,hart-index-bits = <3>;
+            riscv,guest-index-bits = <6>;
+            interrupts-extended = <
+                &cpu0_intc 9 &cpu1_intc 9
+                &cpu2_intc 9 &cpu3_intc 9
+                &cpu4_intc 9 &cpu5_intc 9
+                &cpu6_intc 9 &cpu7_intc 9
+            >;
+        };
+
+        maplic: interrupt-controller@f1800000 {
+            #address-cells = <0>;
+            #interrupt-cells = <2>;
+            compatible = "riscv,aplic";
+            reg = <0x0 0xf1800000 0x0 0x4000>;
+            interrupt-controller;
+            msi-parent = <&mimsic>;
+            riscv,num-sources = <512>;
+            riscv,children = <&saplic>;
+            riscv,delegation = <&saplic 1 512>;
+        };
+
+        saplic: interrupt-controller@e0804000 {
+            #address-cells = <0>;
+            #interrupt-cells = <2>;
+            compatible = "riscv,aplic";
+            reg = <0x0 0xe0804000 0x0 0x4000>;
+            interrupt-controller;
+            msi-parent = <&simsic>;
+            riscv,num-sources = <512>;
+        };
+
+        uart0: serial@d4017000 {
+            compatible = "ns16550a";
+            reg = <0x0 0xd4017000 0x0 0x100>;
+            reg-shift = <2>;
+            reg-io-width = <4>;
+            clock-frequency = <1843200>;
+            current-speed = <115200>;
+            interrupt-parent = <&saplic>;
+            interrupts = <42 4>;
+        };
+    };
+};

@@ -349,13 +349,13 @@ machine_image_prepare() {
         staging_dir="$(mktemp -d "${release_dir}.tmp.XXXXXX")"
         if ! (
             trap 'rm -rf -- "${staging_dir}"' EXIT
-            tar \
-                --extract \
-                --use-compress-program=zstd \
-                --file="${archive}" \
-                --directory="${staging_dir}" \
-                --no-same-owner \
-                --no-same-permissions
+            zstd --decompress --stdout "${archive}" |
+                tar \
+                    --extract \
+                    --file=- \
+                    --directory="${staging_dir}" \
+                    --no-same-owner \
+                    --no-same-permissions
             for required_image in "${required_images[@]}"; do
                 [[ -f "${staging_dir}/images/${required_image}" ]] || {
                     printf 'error: release archive does not contain images/%s\n' \

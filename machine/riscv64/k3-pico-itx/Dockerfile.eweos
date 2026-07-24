@@ -1,0 +1,29 @@
+# syntax=docker/dockerfile:1.7
+
+FROM ubuntu@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90 AS fetcher
+
+ARG EWEOS_URL=https://github.com/zevorn/spacemit-k3-qemu-images/releases/download/eweos-20260425-k3-qemu2/eweos-k3-initramfs.cpio.gz
+ARG EWEOS_SHA256=911c88733ca5c8c76311033cc051f1672b94861ef8a525368f5cd9d4b64fc943
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl \
+        --fail \
+        --location \
+        --retry 3 \
+        --show-error \
+        --silent \
+        --output /eweos-k3-initramfs.cpio.gz \
+        "${EWEOS_URL}" \
+    && echo "${EWEOS_SHA256}  /eweos-k3-initramfs.cpio.gz" \
+        | sha256sum --check --strict
+
+FROM scratch AS export
+
+COPY --from=fetcher /eweos-k3-initramfs.cpio.gz /images/eweos-k3-initramfs.cpio.gz
