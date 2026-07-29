@@ -93,6 +93,24 @@ docker buildx build \
   .
 ```
 
+For a component that is distributed only as a binary blob, `Dockerfile.blob`
+downloads it, verifies its SHA-256 digest, and exports it under the file
+name selected by the required `BLOB_FILENAME` argument:
+
+```console
+docker buildx build \
+  --file scripts/Dockerfile.blob \
+  --build-arg BLOB_URL=https://example.com/path/to/firmware \
+  --build-arg BLOB_SHA256=<sha256-digest> \
+  --build-arg BLOB_FILENAME=firmware.bin \
+  --output type=local,dest=output \
+  .
+```
+
+The exported file is `output/images/firmware.bin`. A machine `build.hcl` can
+inherit the reusable `_blob` target and set these three arguments for a
+specific vendor artifact.
+
 Each machine's `build.hcl` inherits reusable component targets from
 `scripts/docker-bake.hcl`. Build and assemble all components declared by a
 machine with:

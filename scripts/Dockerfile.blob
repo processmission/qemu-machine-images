@@ -1,0 +1,38 @@
+# syntax=docker/dockerfile:1.7
+
+FROM alpine:3.22.5 AS downloader
+
+RUN apk add --no-cache ca-certificates curl
+
+ARG BLOB_URL
+ARG BLOB_SHA256
+ARG BLOB_FILENAME
+
+RUN test -n "${BLOB_URL}" || \
+        { echo 'BLOB_URL build argument is required' >&2; exit 1; } && \
+    printf '%s\n' "${BLOB_SHA256}" | \
+        grep -Eq '^[0-9a-f]{64}$' || \
+        { echo 'BLOB_SHA256 must be a lowercase SHA-256 digest' >&2; exit 1; }
+
+RUN case "${BLOB_FILENAME}" in \
+        ""|"."|".."|*[!A-Za-z0-9._-]*) \
+            echo 'BLOB_FILENAME must be a safe file name' >&2; \
+            exit 1; \
+            ;; \
+    esac
+
+RUN mkdir -p /output/images && \
+    curl \
+        --fail \
+        --location \
+        --retry 3 \
+        --retry-all-errors \
+        --output "/output/images/${BLOB_FILENAME}" \
+        "${BLOB_URL}" && \
+    printf '%s  %s\n' \
+        "${BLOB_SHA256}" \
+        "/output/images/${BLOB_FILENAME}" | \
+        sha256sum -c
+
+FROM scratch AS export
+COPY --from=downloader /output/images /images
