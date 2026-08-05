@@ -58,15 +58,56 @@ machine_image_download() {
     local temporary="${output}.part"
 
     rm -f -- "${temporary}"
-    curl \
+    if ! curl \
+        --connect-timeout 10 \
         --fail \
         --location \
         --retry 3 \
+        --retry-max-time 30 \
         --show-error \
         --silent \
         --output "${temporary}" \
-        "${url}"
+        "${url}"; then
+        rm -f -- "${temporary}"
+        return 1
+    fi
     mv -- "${temporary}" "${output}"
+}
+
+machine_image_checksum_digest() {
+    if (( $# != 2 )); then
+        machine_image_die \
+            "machine_image_checksum_digest requires a checksum and asset"
+    fi
+
+    local checksum="$1"
+    local asset="$2"
+    local -a lines=()
+
+    mapfile -t lines < "${checksum}"
+    if (( ${#lines[@]} != 1 )) ||
+        [[ ! "${lines[0]}" =~ ^([[:xdigit:]]{64})[[:space:]]+(\*?)(.*)$ ]] ||
+        [[ "${BASH_REMATCH[3]}" != "${asset}" ]]; then
+        machine_image_die "invalid checksum file for ${asset}"
+    fi
+
+    printf '%s\n' "${BASH_REMATCH[1],,}"
+}
+
+machine_image_checksum_matches() {
+    if (( $# != 2 )); then
+        machine_image_die \
+            "machine_image_checksum_matches requires a file and checksum"
+    fi
+
+    local file="$1"
+    local expected="$2"
+    local actual
+
+    [[ -f "${file}" ]] || return 1
+    actual="$(sha256sum -- "${file}")" || return 1
+    actual="${actual%% *}"
+    [[ "${actual,,}" == "${expected,,}" ]]
 }
 
 machine_image_pad_to_power_of_two() {
@@ -135,46 +176,82 @@ machine_image_prepare() {
     local release_dir="${repo_root}/.cache/releases/${release_tag}/${architecture}/${machine}"
     local complete_marker="${release_dir}/.complete"
     local archive="${download_dir}/${asset}"
+    local archive_candidate="${archive}.candidate"
     local checksum="${archive}.sha256"
     local image_dir="${release_dir}/images"
+    local release_base_url
+    local expected_checksum
+    local cached_checksum=""
+    local cache_available=1
     local cache_complete=1
 
-    [[ -f "${complete_marker}" ]] || cache_complete=0
+    if [[ -n "${QEMU_MACHINE_IMAGES_RELEASE_BASE_URL:-}" ]]; then
+        release_base_url="${QEMU_MACHINE_IMAGES_RELEASE_BASE_URL%/}"
+    else
+        local repository
+        repository="$(machine_image_github_repository "${repo_root}")"
+        release_base_url="https://github.com/${repository}/releases/download/${release_tag}"
+    fi
+
+    if [[ -f "${complete_marker}" ]]; then
+        cached_checksum="$(< "${complete_marker}")"
+    fi
+    [[ "${cached_checksum}" =~ ^[[:xdigit:]]{64}$ ]] || cache_available=0
     for required_image in "${required_images[@]}"; do
-        [[ -f "${image_dir}/${required_image}" ]] || cache_complete=0
+        [[ -f "${image_dir}/${required_image}" ]] || cache_available=0
     done
 
+    machine_image_require_command curl
+    mkdir -p -- "${download_dir}" "$(dirname -- "${release_dir}")"
+    if ! machine_image_download \
+        "${release_base_url}/${asset}.sha256" "${checksum}"; then
+        if (( cache_available )); then
+            printf 'warning: cannot refresh release checksum; using verified cached images\n' \
+                >&2
+            MACHINE_IMAGE_DIR="${image_dir}"
+            return 0
+        fi
+        machine_image_die \
+            "cannot refresh release checksum and no verified cached images are available"
+    fi
+    expected_checksum="$(machine_image_checksum_digest "${checksum}" "${asset}")"
+
+    cache_complete="${cache_available}"
+    [[ "${cached_checksum}" == "${expected_checksum}" ]] || cache_complete=0
+
     if (( ! cache_complete )); then
-        machine_image_require_command curl
         machine_image_require_command sha256sum
         machine_image_require_command tar
         machine_image_require_command zstd
 
-        local release_base_url
-        if [[ -n "${QEMU_MACHINE_IMAGES_RELEASE_BASE_URL:-}" ]]; then
-            release_base_url="${QEMU_MACHINE_IMAGES_RELEASE_BASE_URL%/}"
-        else
-            local repository
-            repository="$(machine_image_github_repository "${repo_root}")"
-            release_base_url="https://github.com/${repository}/releases/download/${release_tag}"
-        fi
+        if ! machine_image_checksum_matches \
+            "${archive}" "${expected_checksum}"; then
+            if [[ -f "${archive}" ]]; then
+                printf 'cached release asset is stale or invalid; refreshing %s\n' \
+                    "${asset}" >&2
+            else
+                printf 'downloading release asset: %s\n' "${asset}" >&2
+            fi
 
-        mkdir -p -- "${download_dir}" "$(dirname -- "${release_dir}")"
-        [[ -f "${archive}" ]] || \
-            machine_image_download "${release_base_url}/${asset}" "${archive}"
-        machine_image_download \
-            "${release_base_url}/${asset}.sha256" "${checksum}"
-
-        if ! (
-            cd -- "${download_dir}"
-            sha256sum --check --strict "${asset}.sha256"
-        ); then
-            rm -f -- "${archive}"
-            machine_image_download "${release_base_url}/${asset}" "${archive}"
-            (
-                cd -- "${download_dir}"
-                sha256sum --check --strict "${asset}.sha256"
-            ) || machine_image_die "release checksum verification failed"
+            rm -f -- "${archive_candidate}"
+            if ! machine_image_download \
+                "${release_base_url}/${asset}" "${archive_candidate}"; then
+                if (( cache_available )); then
+                    printf 'warning: cannot refresh release asset; using verified cached images\n' \
+                        >&2
+                    MACHINE_IMAGE_DIR="${image_dir}"
+                    return 0
+                fi
+                machine_image_die \
+                    "cannot download release asset and no verified cached images are available"
+            fi
+            if ! machine_image_checksum_matches \
+                "${archive_candidate}" "${expected_checksum}"; then
+                rm -f -- "${archive_candidate}"
+                machine_image_die \
+                    "downloaded release asset checksum verification failed: ${asset}"
+            fi
+            mv -- "${archive_candidate}" "${archive}"
         fi
 
         local staging_dir
@@ -196,9 +273,9 @@ machine_image_prepare() {
                 }
             done
 
+            printf '%s\n' "${expected_checksum}" > "${staging_dir}/.complete"
             rm -rf -- "${release_dir}"
             mv -- "${staging_dir}" "${release_dir}"
-            touch -- "${complete_marker}"
         ); then
             machine_image_die "failed to extract release archive"
         fi

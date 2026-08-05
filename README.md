@@ -190,6 +190,11 @@ following optional variables support forks, older releases, and mirrors:
 Additional command-line arguments are appended to the QEMU command. For
 example, `run.sh -S -s` starts paused with a GDB server.
 
+On each launch, the launcher checks the published checksum and refreshes the
+cached archive and extracted images when it changes. If the checksum cannot
+be reached, the launcher falls back to previously verified extracted images
+when all files required by the selected boot mode are available.
+
 Downloaded archives are cached in `.cache/downloads/`. Extracted images are
 cached in `.cache/releases/<tag>/<architecture>/<machine>/`. Removing either
 directory is safe; the launcher recreates it on the next run.
