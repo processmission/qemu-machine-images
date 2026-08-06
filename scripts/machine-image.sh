@@ -21,6 +21,35 @@ machine_image_exec() {
     exec "$@"
 }
 
+machine_image_launcher_init() {
+    (( $# >= 1 )) || \
+        machine_image_die "machine_image_launcher_init requires a launcher"
+
+    local launcher="$1"
+    local machine_dir
+    shift
+
+    machine_dir="$(
+        CDPATH= cd -- "$(dirname -- "${launcher}")" && pwd
+    )"
+    MACHINE_IMAGE_MACHINE_DIR="${machine_dir}"
+    MACHINE_IMAGE_REPO_ROOT="$(
+        CDPATH= cd -- "${machine_dir}/../../.." && pwd
+    )"
+
+    # shellcheck disable=SC1090
+    source "${machine_dir}/machine.conf"
+
+    [[ -n "${QEMU_EXECUTABLE:-}" ]] || machine_image_die \
+        "QEMU_EXECUTABLE must name the absolute path to qemu-system-${ARCHITECTURE}"
+    [[ "${QEMU_EXECUTABLE}" = /* ]] || \
+        machine_image_die "QEMU_EXECUTABLE must be an absolute path"
+    [[ -x "${QEMU_EXECUTABLE}" ]] || \
+        machine_image_die "QEMU executable is not executable: ${QEMU_EXECUTABLE}"
+
+    MACHINE_IMAGE_QEMU_ARGUMENTS=("$@")
+}
+
 machine_image_github_repository() {
     local repo_root="$1"
     local repository="${QEMU_MACHINE_IMAGES_REPOSITORY:-}"
