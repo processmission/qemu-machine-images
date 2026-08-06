@@ -21,6 +21,65 @@ machine_image_exec() {
     exec "$@"
 }
 
+machine_image_parse_boot_mode() {
+    local declaration
+    local candidate="${1:-}"
+    local selected
+    local supported_mode
+    local default_found=0
+    local selected_found=0
+    declare -A seen_modes=()
+
+    declaration="$(declare -p SUPPORTED_BOOT_MODES 2>/dev/null || true)"
+    [[ "${declaration}" == "declare -a "* ]] || \
+        machine_image_die "SUPPORTED_BOOT_MODES must be an indexed array"
+    (( ${#SUPPORTED_BOOT_MODES[@]} > 0 )) || \
+        machine_image_die "SUPPORTED_BOOT_MODES must not be empty"
+    [[ -n "${DEFAULT_BOOT_MODE:-}" ]] || \
+        machine_image_die "DEFAULT_BOOT_MODE must not be empty"
+
+    case "${candidate}" in
+        "")
+            selected="${DEFAULT_BOOT_MODE}"
+            MACHINE_IMAGE_BOOT_MODE_ARGC=0
+            ;;
+        --)
+            selected="${DEFAULT_BOOT_MODE}"
+            MACHINE_IMAGE_BOOT_MODE_ARGC=1
+            ;;
+        -*)
+            selected="${DEFAULT_BOOT_MODE}"
+            MACHINE_IMAGE_BOOT_MODE_ARGC=0
+            ;;
+        *)
+            selected="${candidate}"
+            MACHINE_IMAGE_BOOT_MODE_ARGC=1
+            if [[ "${2:-}" == -- ]]; then
+                MACHINE_IMAGE_BOOT_MODE_ARGC=2
+            fi
+            ;;
+    esac
+
+    for supported_mode in "${SUPPORTED_BOOT_MODES[@]}"; do
+        [[ "${supported_mode}" =~ ^[A-Za-z0-9_.-]+$ ]] || \
+            machine_image_die "invalid supported boot mode: ${supported_mode}"
+        [[ -z "${seen_modes[${supported_mode}]+present}" ]] || \
+            machine_image_die "duplicate supported boot mode: ${supported_mode}"
+        seen_modes["${supported_mode}"]=1
+
+        [[ "${supported_mode}" == "${DEFAULT_BOOT_MODE}" ]] && \
+            default_found=1
+        [[ "${supported_mode}" == "${selected}" ]] && selected_found=1
+    done
+
+    (( default_found )) || machine_image_die \
+        "default boot mode '${DEFAULT_BOOT_MODE}' is not supported"
+    (( selected_found )) || machine_image_die \
+        "unsupported boot mode '${selected}'; expected one of: ${SUPPORTED_BOOT_MODES[*]}"
+
+    MACHINE_IMAGE_BOOT_MODE="${selected}"
+}
+
 machine_image_launcher_init() {
     (( $# >= 1 )) || \
         machine_image_die "machine_image_launcher_init requires a launcher"
@@ -39,6 +98,9 @@ machine_image_launcher_init() {
 
     # shellcheck disable=SC1090
     source "${machine_dir}/machine.conf"
+
+    machine_image_parse_boot_mode "$@"
+    shift "${MACHINE_IMAGE_BOOT_MODE_ARGC}"
 
     [[ -n "${QEMU_EXECUTABLE:-}" ]] || machine_image_die \
         "QEMU_EXECUTABLE must name the absolute path to qemu-system-${ARCHITECTURE}"

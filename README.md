@@ -178,6 +178,14 @@ QEMU_EXECUTABLE=/absolute/path/to/qemu-system-riscv64 \
   ./machine/riscv64/sifive_u/run.sh
 ```
 
+Each machine declares a default boot mode and the modes it supports. Omit the
+mode to use the default, or select it explicitly as the first argument:
+
+```console
+QEMU_EXECUTABLE=/absolute/path/to/qemu-system-riscv64 \
+  ./machine/riscv64/sifive_u/run.sh firmware
+```
+
 The launcher obtains the GitHub repository from the clone's `origin`. The
 following optional variables support forks, older releases, and mirrors:
 
@@ -188,7 +196,9 @@ following optional variables support forks, older releases, and mirrors:
 | `QEMU_MACHINE_IMAGES_RELEASE_BASE_URL` | Complete directory URL containing the assets |
 
 Additional command-line arguments are appended to the QEMU command. For
-example, `run.sh -S -s` starts paused with a GDB server.
+example, `run.sh -S -s` starts the default boot mode paused with a GDB server.
+Use `--` to separate an explicit boot mode from QEMU options, as in
+`run.sh firmware -- -S -s`.
 
 On each launch, the launcher checks the published checksum and refreshes the
 cached archive and extracted images when it changes. If the checksum cannot
