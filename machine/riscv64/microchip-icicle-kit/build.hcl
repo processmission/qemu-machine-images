@@ -6,6 +6,10 @@ variable "CACHE_SCOPE" {
   default = "riscv64-microchip-icicle-kit"
 }
 
+variable "BUILD_REVISION" {
+  default = "1"
+}
+
 group "release-components" {
   targets = ["hss", "buildroot"]
 }

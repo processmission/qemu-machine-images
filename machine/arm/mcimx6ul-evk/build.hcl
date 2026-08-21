@@ -6,6 +6,10 @@ variable "CACHE_SCOPE" {
   default = "arm-mcimx6ul-evk"
 }
 
+variable "BUILD_REVISION" {
+  default = "1"
+}
+
 group "release-components" {
   targets = ["buildroot"]
 }

@@ -6,6 +6,10 @@ variable "CACHE_SCOPE" {
   default = "riscv64-sifive_u"
 }
 
+variable "BUILD_REVISION" {
+  default = "1"
+}
+
 group "release-components" {
   targets = ["buildroot"]
 }
