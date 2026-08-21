@@ -51,6 +51,12 @@ Each supported machine has two release assets:
 <release-asset-prefix>-v<version>.tar.zst.sha256
 ```
 
+The release also contains a machine manifest named
+`qemu-machine-images-v<version>.json`. It records each machine's build
+specification digest, archive digest, and source commit. The release workflow
+uses this manifest as the authoritative state of the last successful
+publication.
+
 The checksum file uses the format emitted by `sha256sum`. The archive contains
 exactly the files listed in the machine's `REQUIRED_IMAGES` array under a
 top-level `images/` directory:
@@ -123,6 +129,22 @@ docker buildx bake \
 scripts/assemble-machine-images.sh components output
 ```
 
+Every machine build specification declares a `BUILD_REVISION`. The complete
+`build.hcl` file is the release boundary for that machine. Increment the
+revision when a shared builder, machine configuration, patch, or other input
+requires a new image without otherwise changing the HCL build arguments:
+
+```hcl
+variable "BUILD_REVISION" {
+  default = "2"
+}
+```
+
+Changes that only affect a launcher and consume the same released images do
+not require a revision update. A release-affecting change outside
+`build.hcl` must update the corresponding build specification in the same
+change.
+
 The following sifive_u example packages the required files from an existing
 Buildroot output directory:
 
@@ -146,26 +168,53 @@ Push relevant image changes to `main` to start the release workflow:
 git push origin main
 ```
 
-The workflow runs only when a push changes at least one of these paths:
+The workflow runs automatically only when a push changes one of these paths:
 
 ```text
-.dockerignore
-.github/workflows/release.yml
 VERSION
-machine/**
-scripts/**
+machine/**/build.hcl
 ```
 
 Documentation-only changes, including changes to `README.md`, do not rebuild or
-republish the images.
+republish the images. Changes to shared build or packaging code must bump the
+`BUILD_REVISION` of every affected machine. Workflow-only changes do not
+trigger a release automatically; use manual dispatch when a release rebuild
+is intended.
 
-The workflow derives the fixed release tag `v1.0.0` from `VERSION`, discovers
-machines from their `build.hcl` files, builds and assembles their declared
-components, packages the required images, and verifies the checksum. Only
-after every matrix build succeeds does it move the tag to the current commit
-and create or update the matching GitHub Release, replacing its `.tar.zst` and
-`.sha256` assets. This rolling-release model is not compatible with GitHub's
-immutable releases option.
+For an automatic run, the workflow downloads the published release manifest
+and compares each current `build.hcl` digest with the last successful state.
+It builds a machine when:
+
+- its build specification digest changed;
+- either its archive or checksum is missing from the release; or
+- no usable release manifest exists.
+
+The workflow can also rebuild all machines or one validated machine through
+manual dispatch:
+
+```console
+gh workflow run release.yml -f machine=all
+gh workflow run release.yml -f machine=machine/arm/mcimx6ul-evk
+```
+
+The current `v1.0.0` release remains a mutable rolling release while the
+release process is stabilized. For this version, only changed machine assets
+are replaced. If a rebuilt archive has the same SHA-256 as its published
+asset, the workflow leaves the archive and checksum untouched and updates
+only the manifest.
+
+When `VERSION` names a new release, unchanged machine archives are downloaded
+from the previous release, verified, renamed for the new version, and reused
+without rebuilding. Their checksum files are regenerated with the new asset
+names. The new release is published only after every supported machine has a
+verified archive/checksum pair and the GitHub asset digests match the complete
+manifest.
+
+After `v1.0.0` is frozen, the workflow must stop force-moving its tag and
+overwriting its assets before immutable releases are enabled. Subsequent
+release changes must update `VERSION`: use a patch version for compatible
+image fixes, a minor version for new machines or boot modes, and a major
+version for incompatible asset or launcher contracts.
 
 ## Run a machine
 
