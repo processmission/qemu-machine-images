@@ -11,6 +11,7 @@ usage() {
     cat >&2 <<'EOF'
 usage:
   release-manifest.sh create REPO_ROOT RELEASE_TAG DIST_DIR SOURCE_SHA OUTPUT
+  release-manifest.sh select REPO_ROOT RELEASE_TAG MANIFEST ASSETS REQUEST
   release-manifest.sh validate RELEASE_TAG MANIFEST
   release-manifest.sh verify REPO_ROOT RELEASE_TAG MANIFEST DIST_DIR
 EOF
@@ -310,6 +311,91 @@ verify_manifest() {
         die "release manifest machine set is incomplete"
 }
 
+select_machines() {
+    (( $# == 5 )) || usage
+
+    local repo_root
+    local release_tag="$2"
+    local manifest="$3"
+    local assets="$4"
+    local request="$5"
+    local machine_dir
+    local asset
+    local build_hcl_sha256
+    local published_hcl_sha256
+    local -a inventory=()
+    local -a selected=()
+    declare -A known_machines=()
+    declare -A published_assets=()
+
+    repo_root="$(realpath -e -- "$1")"
+    validate_release_tag "${release_tag}"
+    mapfile -t inventory < <(machine_inventory "${repo_root}" "${release_tag}")
+
+    for entry in "${inventory[@]}"; do
+        IFS=$'\t' read -r machine_dir asset build_hcl_sha256 <<< "${entry}"
+        known_machines["${machine_dir}"]=1
+    done
+
+    case "${request}" in
+        all)
+            for entry in "${inventory[@]}"; do
+                IFS=$'\t' read -r machine_dir asset build_hcl_sha256 \
+                    <<< "${entry}"
+                selected+=("${machine_dir}")
+            done
+            ;;
+        auto)
+            if [[ "${manifest}" == - || "${assets}" == - ]]; then
+                for entry in "${inventory[@]}"; do
+                    IFS=$'\t' read -r machine_dir asset build_hcl_sha256 \
+                        <<< "${entry}"
+                    selected+=("${machine_dir}")
+                done
+            else
+                validate_manifest "${release_tag}" "${manifest}"
+                [[ -r "${assets}" ]] || \
+                    die "release asset list is not readable: ${assets}"
+                jq --exit-status '
+                    type == "array" and all(.[]; type == "string")
+                ' "${assets}" >/dev/null || \
+                    die "invalid release asset list: ${assets}"
+                while IFS= read -r asset; do
+                    published_assets["${asset}"]=1
+                done < <(jq --raw-output '.[]' "${assets}")
+
+                for entry in "${inventory[@]}"; do
+                    IFS=$'\t' read -r \
+                        machine_dir asset build_hcl_sha256 <<< "${entry}"
+                    published_hcl_sha256="$(
+                        jq --raw-output \
+                            --arg machine_dir "${machine_dir}" '
+                                .machines[$machine_dir].build_hcl_sha256 // ""
+                            ' "${manifest}"
+                    )"
+                    if [[ "${published_hcl_sha256}" != \
+                              "${build_hcl_sha256}" ||
+                          -z "${published_assets[${asset}]+present}" ||
+                          -z "${published_assets[${asset}.sha256]+present}" ]]; then
+                        selected+=("${machine_dir}")
+                    fi
+                done
+            fi
+            ;;
+        *)
+            [[ "${request}" =~ \
+                ^machine/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || \
+                die "invalid machine selection: ${request}"
+            [[ -n "${known_machines[${request}]+present}" ]] || \
+                die "unknown machine requested: ${request}"
+            selected+=("${request}")
+            ;;
+    esac
+
+    jq --compact-output --null-input \
+        '$ARGS.positional' --args "${selected[@]}"
+}
+
 main() {
     (( $# >= 1 )) || usage
 
@@ -321,6 +407,7 @@ main() {
     shift
     case "${command}" in
         create) create_manifest "$@" ;;
+        select) select_machines "$@" ;;
         validate)
             (( $# == 2 )) || usage
             validate_release_tag "$1"

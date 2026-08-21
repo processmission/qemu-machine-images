@@ -36,6 +36,7 @@ make_machine machine/riscv64/board-b riscv64-board-b
 readonly SOURCE_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 readonly MANIFEST="${TEST_ROOT}/dist/qemu-machine-images-v1.2.3.json"
 readonly SECOND_MANIFEST="${TEST_ROOT}/dist/second-manifest.json"
+readonly ASSETS="${TEST_ROOT}/assets.json"
 
 "${MANIFEST_TOOL}" create \
     "${TEST_ROOT}/repo" \
@@ -63,6 +64,23 @@ cmp "${MANIFEST}" "${SECOND_MANIFEST}"
     '.machines["machine/arm/board-a"].built_from' \
     "${MANIFEST}")" == "${SOURCE_SHA}" ]]
 
+jq '[.machines[].asset] + ([.machines[].asset] | map(. + ".sha256"))' \
+    "${MANIFEST}" > "${ASSETS}"
+[[ "$("${MANIFEST_TOOL}" select \
+    "${TEST_ROOT}/repo" v1.2.3 "${MANIFEST}" "${ASSETS}" auto)" == '[]' ]]
+[[ "$("${MANIFEST_TOOL}" select \
+    "${TEST_ROOT}/repo" v1.2.3 - - auto)" == \
+    '["machine/arm/board-a","machine/riscv64/board-b"]' ]]
+[[ "$("${MANIFEST_TOOL}" select \
+    "${TEST_ROOT}/repo" v1.2.3 "${MANIFEST}" "${ASSETS}" \
+    machine/riscv64/board-b)" == '["machine/riscv64/board-b"]' ]]
+if "${MANIFEST_TOOL}" select \
+    "${TEST_ROOT}/repo" v1.2.3 "${MANIFEST}" "${ASSETS}" \
+    machine/arm/unknown >/dev/null 2>&1; then
+    echo "unknown machine selection was accepted" >&2
+    exit 1
+fi
+
 jq '.schema = 2' "${MANIFEST}" > "${TEST_ROOT}/invalid.json"
 if "${MANIFEST_TOOL}" validate \
     v1.2.3 "${TEST_ROOT}/invalid.json" >/dev/null 2>&1; then
@@ -72,6 +90,9 @@ fi
 
 printf 'changed\n' >> \
     "${TEST_ROOT}/repo/machine/arm/board-a/build.hcl"
+[[ "$("${MANIFEST_TOOL}" select \
+    "${TEST_ROOT}/repo" v1.2.3 "${MANIFEST}" "${ASSETS}" auto)" == \
+    '["machine/arm/board-a"]' ]]
 if "${MANIFEST_TOOL}" verify \
     "${TEST_ROOT}/repo" \
     v1.2.3 \
@@ -82,6 +103,15 @@ if "${MANIFEST_TOOL}" verify \
 fi
 printf 'variable "BUILD_REVISION" { default = "1" }\n' \
     > "${TEST_ROOT}/repo/machine/arm/board-a/build.hcl"
+
+jq 'map(select(. != "riscv64-board-b-v1.2.3.tar.zst.sha256"))' \
+    "${ASSETS}" > "${TEST_ROOT}/incomplete-assets.json"
+[[ "$("${MANIFEST_TOOL}" select \
+    "${TEST_ROOT}/repo" \
+    v1.2.3 \
+    "${MANIFEST}" \
+    "${TEST_ROOT}/incomplete-assets.json" \
+    auto)" == '["machine/riscv64/board-b"]' ]]
 
 printf 'corrupt\n' > "${TEST_ROOT}/dist/arm-board-a-v1.2.3.tar.zst"
 if "${MANIFEST_TOOL}" verify \
