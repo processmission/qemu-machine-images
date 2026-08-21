@@ -5,6 +5,7 @@ FROM registry.gitlab.com/buildroot.org/buildroot/base:20250218.2110 AS builder
 ARG BUILDROOT_URL=https://gitlab.com/buildroot.org/buildroot.git
 ARG BUILDROOT_REF=2026.05
 ARG BUILDROOT_DEFCONFIG
+ARG BUILDROOT_CONFIG_FRAGMENTS
 
 USER root
 RUN install -d -o br-user -g br-user \
@@ -14,15 +15,38 @@ RUN install -d -o br-user -g br-user \
 USER br-user
 WORKDIR /workspace
 
-RUN test -n "${BUILDROOT_DEFCONFIG}" || \
-        { echo 'BUILDROOT_DEFCONFIG build argument is required' >&2; exit 1; }
+RUN case "${BUILDROOT_DEFCONFIG}" in \
+        ""|*[!A-Za-z0-9_.-]*) \
+            echo 'BUILDROOT_DEFCONFIG must be a defconfig name' >&2; \
+            exit 1; \
+            ;; \
+    esac
 
 RUN git init buildroot && \
     git -C buildroot remote add origin "${BUILDROOT_URL}" && \
     git -C buildroot fetch --depth 1 origin "${BUILDROOT_REF}" && \
     git -C buildroot checkout --detach FETCH_HEAD
 
-RUN make -C buildroot O=/workspace/output "${BUILDROOT_DEFCONFIG}"
+RUN if [ -z "${BUILDROOT_CONFIG_FRAGMENTS}" ]; then \
+        make -C buildroot O=/workspace/output "${BUILDROOT_DEFCONFIG}"; \
+    else \
+        mkdir -p /workspace/output; \
+        set -- "configs/${BUILDROOT_DEFCONFIG}"; \
+        set -f; \
+        for fragment in ${BUILDROOT_CONFIG_FRAGMENTS}; do \
+            case "${fragment}" in \
+                -*|/*|.|..|../*|*/./*|*/../*|*/.|*/..|*[!A-Za-z0-9_./-]*) \
+                    echo "invalid Buildroot config fragment: ${fragment}" >&2; \
+                    exit 1; \
+                    ;; \
+            esac; \
+            test -r "buildroot/${fragment}" || \
+                { echo "Buildroot config fragment is not readable: ${fragment}" >&2; exit 1; }; \
+            set -- "$@" "${fragment}"; \
+        done; \
+        cd buildroot; \
+        ./support/kconfig/merge_config.sh -O /workspace/output "$@"; \
+    fi
 
 RUN --mount=type=cache,target=/home/br-user/.buildroot-dl,uid=1000,gid=1000,sharing=locked \
     make -C buildroot \

@@ -99,6 +99,24 @@ docker buildx build \
   .
 ```
 
+Some Buildroot trees compose a base defconfig with additional configuration
+fragments. Set `BUILDROOT_CONFIG_FRAGMENTS` to a whitespace-separated list of
+repository-relative fragment paths:
+
+```console
+docker buildx build \
+  --file scripts/Dockerfile.buildroot \
+  --build-arg BUILDROOT_DEFCONFIG=board_defconfig \
+  --build-arg BUILDROOT_CONFIG_FRAGMENTS="configs/storage.config configs/network.config" \
+  --output type=local,dest=output \
+  .
+```
+
+When fragments are present, the builder runs the tree's
+`support/kconfig/merge_config.sh` with the selected defconfig as its base and
+keeps the generated configuration in the normal out-of-tree output directory.
+Without fragments, the existing `make <defconfig>` behavior is unchanged.
+
 For a component that is distributed only as a binary blob, `Dockerfile.blob`
 downloads it, verifies its SHA-256 digest, and exports it under the file
 name selected by the required `BLOB_FILENAME` argument:
