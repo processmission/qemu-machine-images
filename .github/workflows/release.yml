@@ -2,15 +2,18 @@ name: Build and release machine images
 
 on:
   workflow_dispatch:
+    inputs:
+      machine:
+        description: Machine directory to rebuild, or all
+        required: true
+        default: all
+        type: string
   push:
     branches:
       - main
     paths:
-      - .dockerignore
-      - .github/workflows/release.yml
       - VERSION
-      - machine/**
-      - scripts/**
+      - machine/**/build.hcl
 
 permissions:
   contents: read
@@ -25,6 +28,9 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       machine_matrix: ${{ steps.machines.outputs.machine_matrix }}
+      has_builds: ${{ steps.machines.outputs.has_builds }}
+      needs_release: ${{ steps.machines.outputs.needs_release }}
+      state_tag: ${{ steps.state.outputs.state_tag }}
       version: ${{ steps.release.outputs.version }}
       release_tag: ${{ steps.release.outputs.release_tag }}
 
@@ -32,60 +38,14 @@ jobs:
       - name: Check out source
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: Discover machine builds
-        id: machines
-        run: |
-          set -euo pipefail
-
-          declare -a build_files=()
-          mapfile -t build_files < <(
-              find machine \
-                  -mindepth 3 \
-                  -maxdepth 3 \
-                  -type f \
-                  -name build.hcl \
-                  -print | sort
-          )
-          if (( ${#build_files[@]} == 0 )); then
-              echo "no machine build.hcl files found" >&2
-              exit 1
-          fi
-
-          declare -a machine_dirs=()
-          for build_file in "${build_files[@]}"; do
-              machine_dir="${build_file%/build.hcl}"
-              if [[ ! "${machine_dir}" =~ ^machine/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
-                  echo "invalid machine directory: ${machine_dir}" >&2
-                  exit 1
-              fi
-              if [[ ! -r "${machine_dir}/machine.conf" ]]; then
-                  echo "machine configuration is not readable: ${machine_dir}" >&2
-                  exit 1
-              fi
-              if [[ ! -x "${machine_dir}/run.sh" ]]; then
-                  echo "machine launcher is not executable: ${machine_dir}" >&2
-                  exit 1
-              fi
-              machine_dirs+=("${machine_dir}")
-          done
-
-          machine_matrix="$(
-              jq \
-                  --compact-output \
-                  --null-input \
-                  '$ARGS.positional' \
-                  --args \
-                  "${machine_dirs[@]}"
-          )"
-          echo "machine_matrix=${machine_matrix}" >> "${GITHUB_OUTPUT}"
-
       - name: Resolve release version
         id: release
         run: |
           set -euo pipefail
 
           version="$(tr -d '[:space:]' < VERSION)"
-          if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          if [[ ! "${version}" =~ \
+              ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
               echo "VERSION is not a semantic version: ${version}" >&2
               exit 1
           fi
@@ -94,9 +54,106 @@ jobs:
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
           echo "release_tag=${release_tag}" >> "${GITHUB_OUTPUT}"
 
+      - name: Resolve published release state
+        id: state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+
+          state_root="${RUNNER_TEMP}/machine-release-state"
+          mkdir -p -- "${state_root}"
+          state_tag=-
+          target_exists=false
+
+          if gh release view \
+              "${RELEASE_TAG}" \
+              --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+              state_tag="${RELEASE_TAG}"
+              target_exists=true
+          else
+              state_tag="$(
+                  gh release list \
+                      --repo "${GITHUB_REPOSITORY}" \
+                      --exclude-drafts \
+                      --exclude-pre-releases \
+                      --limit 1 \
+                      --json tagName \
+                      --jq '.[0].tagName // "-"'
+              )"
+          fi
+
+          manifest=-
+          assets=-
+          if [[ "${state_tag}" != - ]]; then
+              assets="${state_root}/assets.json"
+              gh release view \
+                  "${state_tag}" \
+                  --repo "${GITHUB_REPOSITORY}" \
+                  --json assets \
+                  --jq '[.assets[].name]' > "${assets}"
+
+              manifest_name="qemu-machine-images-${state_tag}.json"
+              if gh release download \
+                  "${state_tag}" \
+                  --repo "${GITHUB_REPOSITORY}" \
+                  --pattern "${manifest_name}" \
+                  --dir "${state_root}" >/dev/null 2>&1; then
+                  manifest="${state_root}/${manifest_name}"
+              fi
+          fi
+
+          echo "assets=${assets}" >> "${GITHUB_OUTPUT}"
+          echo "manifest=${manifest}" >> "${GITHUB_OUTPUT}"
+          echo "state_tag=${state_tag}" >> "${GITHUB_OUTPUT}"
+          echo "target_exists=${target_exists}" >> "${GITHUB_OUTPUT}"
+
+      - name: Select machine builds
+        id: machines
+        env:
+          ASSETS: ${{ steps.state.outputs.assets }}
+          EVENT_NAME: ${{ github.event_name }}
+          MANIFEST: ${{ steps.state.outputs.manifest }}
+          RELEASE_TAG: ${{ steps.release.outputs.release_tag }}
+          REQUESTED_MACHINE: ${{ inputs.machine }}
+          STATE_TAG: ${{ steps.state.outputs.state_tag }}
+          TARGET_EXISTS: ${{ steps.state.outputs.target_exists }}
+        run: |
+          set -euo pipefail
+
+          request=auto
+          if [[ "${EVENT_NAME}" == workflow_dispatch ]]; then
+              request="${REQUESTED_MACHINE}"
+          fi
+          machine_matrix="$(
+              scripts/release-manifest.sh select \
+                  "${GITHUB_WORKSPACE}" \
+                  "${RELEASE_TAG}" \
+                  "${STATE_TAG}" \
+                  "${MANIFEST}" \
+                  "${ASSETS}" \
+                  "${request}"
+          )"
+          build_count="$(jq --raw-output 'length' <<< "${machine_matrix}")"
+          has_builds=false
+          needs_release=false
+          if (( build_count > 0 )); then
+              has_builds=true
+              needs_release=true
+          elif [[ "${TARGET_EXISTS}" == false ]]; then
+              needs_release=true
+          fi
+
+          echo "selected machine builds: ${machine_matrix}"
+          echo "has_builds=${has_builds}" >> "${GITHUB_OUTPUT}"
+          echo "machine_matrix=${machine_matrix}" >> "${GITHUB_OUTPUT}"
+          echo "needs_release=${needs_release}" >> "${GITHUB_OUTPUT}"
+
   build:
     name: Build ${{ matrix.machine_dir }}
     needs: prepare
+    if: needs.prepare.outputs.has_builds == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     strategy:
@@ -223,6 +280,11 @@ jobs:
     needs:
       - prepare
       - build
+    if: >-
+      always() &&
+      needs.prepare.result == 'success' &&
+      needs.prepare.outputs.needs_release == 'true' &&
+      (needs.build.result == 'success' || needs.build.result == 'skipped')
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -231,63 +293,123 @@ jobs:
       - name: Check out release commit
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
+      - name: Prepare release directories
+        run: mkdir -p candidates previous release upload
+
       - name: Download release candidates
+        if: needs.prepare.outputs.has_builds == 'true'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: release-*
-          path: dist
+          path: candidates
           merge-multiple: true
 
-      - name: Verify release candidates
+      - name: Download reusable release assets
+        id: base
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATE_TAG: ${{ needs.prepare.outputs.state_tag }}
         run: |
           set -euo pipefail
 
-          shopt -s nullglob
-          archives=(dist/*.tar.zst)
-          checksums=(dist/*.tar.zst.sha256)
-          if (( ${#archives[@]} == 0 || ${#archives[@]} != ${#checksums[@]} )); then
-              echo "release archive/checksum set is incomplete" >&2
-              exit 1
+          base_manifest=-
+          base_assets=-
+          if [[ "${STATE_TAG}" != - ]]; then
+              manifest_name="qemu-machine-images-${STATE_TAG}.json"
+              if gh release download \
+                  "${STATE_TAG}" \
+                  --repo "${GITHUB_REPOSITORY}" \
+                  --pattern "${manifest_name}" \
+                  --dir previous >/dev/null 2>&1; then
+                  gh release download \
+                      "${STATE_TAG}" \
+                      --repo "${GITHUB_REPOSITORY}" \
+                      --pattern '*.tar.zst' \
+                      --pattern '*.tar.zst.sha256' \
+                      --dir previous
+                  base_manifest="previous/${manifest_name}"
+                  base_assets=previous
+              fi
           fi
 
-          (
-              cd dist
-              for checksum in *.tar.zst.sha256; do
-                  sha256sum --check "${checksum}"
-              done
-          )
+          echo "base_assets=${base_assets}" >> "${GITHUB_OUTPUT}"
+          echo "base_manifest=${base_manifest}" >> "${GITHUB_OUTPUT}"
 
-      - name: Create release manifest
+      - name: Assemble release assets
         env:
+          BASE_ASSETS: ${{ steps.base.outputs.base_assets }}
+          BASE_MANIFEST: ${{ steps.base.outputs.base_manifest }}
+          BASE_TAG: ${{ needs.prepare.outputs.state_tag }}
           RELEASE_SHA: ${{ github.sha }}
           RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
         run: |
           set -euo pipefail
 
-          manifest="dist/qemu-machine-images-${RELEASE_TAG}.json"
-          scripts/release-manifest.sh create \
+          if [[ "${BASE_MANIFEST}" == - ]]; then
+              BASE_TAG=-
+              BASE_ASSETS=-
+          fi
+          scripts/release-manifest.sh merge \
               "${GITHUB_WORKSPACE}" \
               "${RELEASE_TAG}" \
-              dist \
               "${RELEASE_SHA}" \
-              "${manifest}"
-          scripts/release-manifest.sh verify \
-              "${GITHUB_WORKSPACE}" \
+              candidates \
+              "${BASE_TAG}" \
+              "${BASE_MANIFEST}" \
+              "${BASE_ASSETS}" \
+              release \
+              upload
+
+      - name: Check release payload
+        id: payload
+        run: |
+          set -euo pipefail
+
+          has_assets=false
+          if compgen -G 'upload/*.tar.zst' >/dev/null; then
+              has_assets=true
+          fi
+          echo "has_assets=${has_assets}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload changed release assets
+        if: steps.payload.outputs.has_assets == 'true'
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        with:
+          tag_name: ${{ needs.prepare.outputs.release_tag }}
+          name: QEMU machine images ${{ needs.prepare.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          body: |
+            Prebuilt Buildroot images for the supported QEMU machines.
+
+            This rolling release tracks the latest successful build from `main`.
+
+            **Full Changelog**: https://github.com/${{ github.repository }}/commits/${{ needs.prepare.outputs.release_tag }}
+          overwrite_files: true
+          preserve_order: true
+          fail_on_unmatched_files: true
+          files: |
+            upload/*.tar.zst
+            upload/*.tar.zst.sha256
+
+      - name: Verify published release payload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+
+          manifest="release/qemu-machine-images-${RELEASE_TAG}.json"
+          gh release view \
+              "${RELEASE_TAG}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --json assets > published-assets.json
+          scripts/release-manifest.sh verify-payload \
               "${RELEASE_TAG}" \
               "${manifest}" \
-              dist
+              release \
+              published-assets.json
 
-      - name: Move release tag to this commit
-        env:
-          RELEASE_SHA: ${{ github.sha }}
-          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
-        run: |
-          set -euo pipefail
-
-          git tag --force "${RELEASE_TAG}" "${RELEASE_SHA}"
-          git push --force origin "refs/tags/${RELEASE_TAG}"
-
-      - name: Create GitHub Release
+      - name: Upload release manifest
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
           tag_name: ${{ needs.prepare.outputs.release_tag }}
@@ -301,7 +423,32 @@ jobs:
             **Full Changelog**: https://github.com/${{ github.repository }}/commits/${{ needs.prepare.outputs.release_tag }}
           overwrite_files: true
           fail_on_unmatched_files: true
-          files: |
-            dist/*.tar.zst
-            dist/*.tar.zst.sha256
-            dist/qemu-machine-images-*.json
+          files: upload/qemu-machine-images-*.json
+
+      - name: Verify published release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+
+          manifest="release/qemu-machine-images-${RELEASE_TAG}.json"
+          gh release view \
+              "${RELEASE_TAG}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --json assets > published-assets.json
+          scripts/release-manifest.sh verify-assets \
+              "${RELEASE_TAG}" \
+              "${manifest}" \
+              release \
+              published-assets.json
+
+      - name: Move release tag to this commit
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+
+          git tag --force "${RELEASE_TAG}" "${RELEASE_SHA}"
+          git push --force origin "refs/tags/${RELEASE_TAG}"
