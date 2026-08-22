@@ -416,7 +416,7 @@ jobs:
           fi
           echo "has_assets=${has_assets}" >> "${GITHUB_OUTPUT}"
 
-      - name: Upload changed release assets
+      - name: Upload release payload
         if: steps.payload.outputs.has_assets == 'true'
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
@@ -426,10 +426,12 @@ jobs:
           body: |
             Prebuilt Buildroot images for the supported QEMU machines.
 
-            This rolling release tracks the latest successful build from `main`.
+            ${{ needs.prepare.outputs.release_policy == 'rolling' && 'Development rolling release. Assets and checksums may change.' || 'Verified release built from the main branch.' }}
 
             **Full Changelog**: https://github.com/${{ github.repository }}/commits/${{ needs.prepare.outputs.release_tag }}
+          draft: ${{ needs.prepare.outputs.release_policy == 'draft' }}
           overwrite_files: true
+          prerelease: ${{ needs.prepare.outputs.release_policy == 'rolling' }}
           preserve_order: true
           fail_on_unmatched_files: true
           files: |
@@ -463,10 +465,12 @@ jobs:
           body: |
             Prebuilt Buildroot images for the supported QEMU machines.
 
-            This rolling release tracks the latest successful build from `main`.
+            ${{ needs.prepare.outputs.release_policy == 'rolling' && 'Development rolling release. Assets and checksums may change.' || 'Verified release built from the main branch.' }}
 
             **Full Changelog**: https://github.com/${{ github.repository }}/commits/${{ needs.prepare.outputs.release_tag }}
+          draft: ${{ needs.prepare.outputs.release_policy == 'draft' }}
           overwrite_files: true
+          prerelease: ${{ needs.prepare.outputs.release_policy == 'rolling' }}
           fail_on_unmatched_files: true
           files: upload/qemu-machine-images-*.json
 
@@ -488,8 +492,48 @@ jobs:
               release \
               published-assets.json
 
-      - name: Move release tag to this commit
+      - name: Publish verified draft release
+        if: needs.prepare.outputs.release_policy == 'draft'
         env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+
+          gh release edit \
+              "${RELEASE_TAG}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --draft=false \
+              --latest \
+              --target "${RELEASE_SHA}"
+
+          release_state="$(
+              gh release view \
+                  "${RELEASE_TAG}" \
+                  --repo "${GITHUB_REPOSITORY}" \
+                  --json isDraft \
+                  --jq '.isDraft'
+          )"
+          [[ "${release_state}" == false ]] || {
+              echo "release remained a draft: ${RELEASE_TAG}" >&2
+              exit 1
+          }
+
+          tag_sha="$(
+              gh api \
+                  "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" \
+                  --jq '.object.sha'
+          )"
+          [[ "${tag_sha}" == "${RELEASE_SHA}" ]] || {
+              echo "release tag points to an unexpected commit: ${tag_sha}" >&2
+              exit 1
+          }
+
+      - name: Move development rolling tag
+        if: needs.prepare.outputs.release_policy == 'rolling'
+        env:
+          GH_TOKEN: ${{ github.token }}
           RELEASE_SHA: ${{ github.sha }}
           RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
         run: |
@@ -497,3 +541,13 @@ jobs:
 
           git tag --force "${RELEASE_TAG}" "${RELEASE_SHA}"
           git push --force origin "refs/tags/${RELEASE_TAG}"
+
+          tag_sha="$(
+              gh api \
+                  "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" \
+                  --jq '.object.sha'
+          )"
+          [[ "${tag_sha}" == "${RELEASE_SHA}" ]] || {
+              echo "release tag points to an unexpected commit: ${tag_sha}" >&2
+              exit 1
+          }
