@@ -196,43 +196,73 @@ machine/**/build.hcl
 Documentation-only changes, including changes to `README.md`, do not rebuild or
 republish the images. Changes to shared build or packaging code must bump the
 `BUILD_REVISION` of every affected machine. Workflow-only changes do not
-trigger a release automatically; use manual dispatch when a release rebuild
-is intended.
+trigger a release automatically.
 
-For an automatic run, the workflow downloads the published release manifest
-and compares each current `build.hcl` digest with the last successful state.
-It builds a machine when:
+The repository that runs the workflow determines the automatic policy:
+
+- a push to `processmission/qemu-machine-images:main` requests an upstream
+  release;
+- a push in a fork builds the selected machine artifacts without publishing a
+  Release.
+
+The workflow downloads the latest release manifest and compares each current
+`build.hcl` digest with the last successful state. A machine requires a new
+build when:
 
 - its build specification digest changed;
 - either its archive or checksum is missing from the release; or
 - no usable release manifest exists.
 
-The workflow can also rebuild all machines or one validated machine through
-manual dispatch:
+Manual dispatch defaults to build-only mode. It uploads run-scoped Actions
+artifacts but never creates a Release, updates a manifest, or moves a tag. This
+allows repeated test builds in a fork without consuming new version numbers:
 
 ```console
-gh workflow run release.yml -f machine=all
-gh workflow run release.yml -f machine=machine/arm/mcimx6ul-evk
+gh workflow run release.yml -f mode=build -f machine=all
+gh workflow run release.yml \
+  -f mode=build \
+  -f machine=machine/riscv64/sifive_u
 ```
 
-The current `v1.0.0` release remains a mutable rolling release while the
-release process is stabilized. For this version, only changed machine assets
-are replaced. If a rebuilt archive has the same SHA-256 as its published
-asset, the workflow leaves the archive and checksum untouched and updates
-only the manifest.
+Manual release mode follows the policy of the repository that runs it:
+
+- upstream allows publishing only an unpublished version or resuming its
+  Draft Release; rebuilding an already published version fails before the
+  build matrix starts and requires `VERSION` to be increased;
+- a fork publishes a development prerelease and may overwrite its same-version
+  assets, update its manifest, and move its tag.
+
+```console
+gh workflow run release.yml \
+  -f mode=release \
+  -f machine=machine/riscv64/sifive_u
+```
 
 When `VERSION` names a new release, unchanged machine archives are downloaded
 from the previous release, verified, renamed for the new version, and reused
 without rebuilding. Their checksum files are regenerated with the new asset
-names. The new release is published only after every supported machine has a
-verified archive/checksum pair and the GitHub asset digests match the complete
-manifest.
+names.
 
-After `v1.0.0` is frozen, the workflow must stop force-moving its tag and
-overwriting its assets before immutable releases are enabled. Subsequent
-release changes must update `VERSION`: use a patch version for compatible
-image fixes, a minor version for new machines or boot modes, and a major
-version for incompatible asset or launcher contracts.
+Upstream assets remain mutable only in a Draft Release. The workflow publishes
+the draft only after every supported machine has a verified archive/checksum
+pair and the GitHub asset digests match the complete manifest. Publishing
+finalizes the tag, and the workflow verifies that it resolves to the release
+commit. Once published, the workflow never overwrites the upstream assets or
+force-moves their tag.
+
+GitHub release immutability only applies to releases published after the
+repository policy is enabled, so it cannot protect the existing upstream
+`v1.0.0` release retroactively. The workflow enforces its frozen state instead.
+Future upstream releases can additionally use GitHub's immutable release
+policy because all asset mutation happens before a draft is published.
+
+Fork releases intentionally remain mutable development channels. Their GitHub
+prerelease status and release notes identify them as rolling releases whose
+assets and checksums may change.
+
+Use a patch version for compatible image fixes, a minor version for new
+machines or boot modes, and a major version for incompatible asset or launcher
+contracts.
 
 ## Run a machine
 
