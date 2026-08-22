@@ -3,6 +3,14 @@ name: Build and release machine images
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: Build artifacts or publish a release
+        required: true
+        default: build
+        type: choice
+        options:
+          - build
+          - release
       machine:
         description: Machine directory to rebuild, or all
         required: true
@@ -30,7 +38,9 @@ jobs:
       machine_matrix: ${{ steps.machines.outputs.machine_matrix }}
       has_builds: ${{ steps.machines.outputs.has_builds }}
       needs_release: ${{ steps.machines.outputs.needs_release }}
+      release_policy: ${{ steps.machines.outputs.release_policy }}
       state_tag: ${{ steps.state.outputs.state_tag }}
+      target_draft: ${{ steps.state.outputs.target_draft }}
       version: ${{ steps.release.outputs.version }}
       release_tag: ${{ steps.release.outputs.release_tag }}
 
@@ -65,12 +75,17 @@ jobs:
           state_root="${RUNNER_TEMP}/machine-release-state"
           mkdir -p -- "${state_root}"
           state_tag=-
+          target_draft=false
           target_exists=false
 
           if gh release view \
               "${RELEASE_TAG}" \
-              --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+              --repo "${GITHUB_REPOSITORY}" \
+              --json isDraft > "${state_root}/target.json" 2>/dev/null; then
               state_tag="${RELEASE_TAG}"
+              target_draft="$(
+                  jq --raw-output '.isDraft' "${state_root}/target.json"
+              )"
               target_exists=true
           else
               state_tag="$(
@@ -107,6 +122,7 @@ jobs:
           echo "assets=${assets}" >> "${GITHUB_OUTPUT}"
           echo "manifest=${manifest}" >> "${GITHUB_OUTPUT}"
           echo "state_tag=${state_tag}" >> "${GITHUB_OUTPUT}"
+          echo "target_draft=${target_draft}" >> "${GITHUB_OUTPUT}"
           echo "target_exists=${target_exists}" >> "${GITHUB_OUTPUT}"
 
       - name: Select machine builds
@@ -115,16 +131,31 @@ jobs:
           ASSETS: ${{ steps.state.outputs.assets }}
           EVENT_NAME: ${{ github.event_name }}
           MANIFEST: ${{ steps.state.outputs.manifest }}
+          MODE: ${{ inputs.mode }}
           RELEASE_TAG: ${{ steps.release.outputs.release_tag }}
+          REPOSITORY: ${{ github.repository }}
           REQUESTED_MACHINE: ${{ inputs.machine }}
           STATE_TAG: ${{ steps.state.outputs.state_tag }}
+          TARGET_DRAFT: ${{ steps.state.outputs.target_draft }}
           TARGET_EXISTS: ${{ steps.state.outputs.target_exists }}
         run: |
           set -euo pipefail
 
           request=auto
+          release_policy=none
           if [[ "${EVENT_NAME}" == workflow_dispatch ]]; then
               request="${REQUESTED_MACHINE}"
+              if [[ "${MODE}" == release ]]; then
+                  if [[ "${REPOSITORY}" == \
+                      processmission/qemu-machine-images ]]; then
+                      release_policy=draft
+                  else
+                      release_policy=rolling
+                  fi
+              fi
+          elif [[ "${REPOSITORY}" == \
+              processmission/qemu-machine-images ]]; then
+              release_policy=draft
           fi
           machine_matrix="$(
               scripts/release-manifest.sh select \
@@ -136,19 +167,33 @@ jobs:
                   "${request}"
           )"
           build_count="$(jq --raw-output 'length' <<< "${machine_matrix}")"
+          if [[ "${release_policy}" == draft &&
+                "${TARGET_EXISTS}" == true &&
+                "${TARGET_DRAFT}" == false ]] && (( build_count > 0 )); then
+              echo \
+                  "release ${RELEASE_TAG} is published; bump VERSION before rebuilding" \
+                  >&2
+              exit 1
+          fi
+
           has_builds=false
           needs_release=false
           if (( build_count > 0 )); then
               has_builds=true
-              needs_release=true
-          elif [[ "${TARGET_EXISTS}" == false ]]; then
-              needs_release=true
+          fi
+          if [[ "${release_policy}" != none ]]; then
+              if (( build_count > 0 )) ||
+                  [[ "${TARGET_EXISTS}" == false ||
+                     "${TARGET_DRAFT}" == true ]]; then
+                  needs_release=true
+              fi
           fi
 
           echo "selected machine builds: ${machine_matrix}"
           echo "has_builds=${has_builds}" >> "${GITHUB_OUTPUT}"
           echo "machine_matrix=${machine_matrix}" >> "${GITHUB_OUTPUT}"
           echo "needs_release=${needs_release}" >> "${GITHUB_OUTPUT}"
+          echo "release_policy=${release_policy}" >> "${GITHUB_OUTPUT}"
 
   build:
     name: Build ${{ matrix.machine_dir }}
