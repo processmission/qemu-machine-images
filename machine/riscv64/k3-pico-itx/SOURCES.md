@@ -89,24 +89,3 @@ contract before compiling the pinned sources:
 - Vendor MD5: `ac768dfd4a7a0831bd68e001ab169030`
 
 No binary from that archive is published as a release artifact here.
-
-## eweOS functional initramfs
-
-The eweOS functional-test initramfs is imported from the immutable
-`eweos-20260425-k3-qemu2` Release in
-`zevorn/spacemit-k3-qemu-images`. The build verifies SHA-256
-`911c88733ca5c8c76311033cc051f1672b94861ef8a525368f5cd9d4b64fc943`
-before exporting the file. The imported archive is 50,134,389 bytes.
-
-Its official eweOS root filesystem is pinned to RISC-V OCI manifest digest
-`sha256:10120b0526e03eb2ffde88dd640744eda1a1b6c45be60b41ea60a0f846014363`.
-The image adds `fastfetch` 2.66.0-1 and `yyjson` 0.12.0-2 from the official
-eweOS repository; their package SHA-256 values are
-`8a2a9dd98a8183d3cff9e66c767dd3a80e3c83fdb2aa4e50e61e74964d454334`
-and
-`508f6c5dea7ea3dc96bc5d4f69824685c2c1387bb937d1904483f3dc397c8044`.
-
-Importing the verified historical archive preserves the exact userspace
-already exercised by QEMU. The originating repository did not contain a
-complete reconstruction recipe for that OCI-derived archive, so this
-repository does not claim to rebuild it from source.

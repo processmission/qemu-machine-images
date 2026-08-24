@@ -11,7 +11,7 @@ variable "BUILD_REVISION" {
 }
 
 group "release-components" {
-  targets = ["sdk", "eweos"]
+  targets = ["sdk"]
 }
 
 target "sdk" {
@@ -29,23 +29,5 @@ target "sdk" {
 
   cache-to = [
     "type=gha,mode=max,scope=${CACHE_SCOPE}-sdk",
-  ]
-}
-
-target "eweos" {
-  context    = "."
-  dockerfile = "machine/riscv64/k3-pico-itx/Dockerfile.eweos"
-  target     = "export"
-
-  output = [
-    "type=local,dest=${OUTPUT_DIR}/eweos",
-  ]
-
-  cache-from = [
-    "type=gha,scope=${CACHE_SCOPE}-eweos",
-  ]
-
-  cache-to = [
-    "type=gha,mode=max,scope=${CACHE_SCOPE}-eweos",
   ]
 }

@@ -173,8 +173,7 @@ not require a revision update. A release-affecting change outside
 `build.hcl` must update the corresponding build specification in the same
 change.
 
-The K3 Pico-ITX definition builds the pinned SpacemiT SDK inputs and imports a
-hash-verified historical eweOS initramfs:
+The K3 Pico-ITX definition builds the pinned SpacemiT SDK inputs:
 
 ```console
 docker buildx bake \
