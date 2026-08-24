@@ -41,7 +41,7 @@ set of supported machines.
 ## Versioning and release assets
 
 `VERSION` records the version of the complete repository release. The current
-value, `1.0.0`, maps to the Git tag and GitHub Release `v1.0.0`. Keeping one
+value, `1.1.0`, maps to the Git tag and GitHub Release `v1.1.0`. Keeping one
 version for the repository makes a release an atomic, testable set of machine
 images. It also avoids separate tag namespaces and release workflows for every
 machine.
