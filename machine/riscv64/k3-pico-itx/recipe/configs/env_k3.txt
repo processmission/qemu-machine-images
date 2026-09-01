@@ -1,0 +1,10 @@
+stdin=serial
+stdout=serial
+stderr=serial
+qemu_bootargs=setenv bootargs earlycon=uart8250,mmio32,0xd4017000,115200 console=ttyS0,115200 rdinit=/init
+qemu_load_kernel=echo K3-QEMU: loading Image from SD; fatload mmc 0:1 ${kernel_addr_r} Image
+qemu_load_dtb=echo K3-QEMU: loading DTB from SD; fatload mmc 0:1 ${fdt_addr_r} k3-pico-itx-qemu-linux-sd.dtb
+qemu_load_initrd=echo K3-QEMU: loading initramfs from SD; fatload mmc 0:1 ${ramdisk_addr_r} k3-qemu-initramfs.cpio.gz && setenv ramdisk_size ${filesize}
+qemu_sd_boot=mmc dev 0 && run qemu_bootargs && run qemu_load_kernel && run qemu_load_dtb && run qemu_load_initrd && echo K3-QEMU: Starting kernel from SD && booti ${kernel_addr_r} ${ramdisk_addr_r}:${ramdisk_size} ${fdt_addr_r}
+bootcmd=if run qemu_sd_boot; then true; else echo K3-QEMU: SD boot failed; false; fi
+bootdelay=0

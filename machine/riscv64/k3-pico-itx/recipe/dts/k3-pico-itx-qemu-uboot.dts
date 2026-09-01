@@ -1,0 +1,27 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/* Copyright (c) 2026 Process Mission */
+
+/include/ "k3-pico-itx-qemu-linux-sd.dts"
+
+/ {
+    sdhci_reset: reset-controller {
+        compatible = "syscon-reset";
+        #reset-cells = <1>;
+        regmap = <&apmu>;
+        offset = <0x54>;
+        mask = <0x3>;
+        assert-high = <0>;
+    };
+};
+
+&{/soc} {
+    apmu: syscon@d4282800 {
+        compatible = "syscon";
+        reg = <0x0 0xd4282800 0x0 0x400>;
+    };
+};
+
+&sdhci0 {
+    resets = <&sdhci_reset 0>, <&sdhci_reset 1>;
+    reset-names = "sdh_axi", "sdh0";
+};

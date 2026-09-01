@@ -1,0 +1,42 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/* Copyright (c) 2026 Process Mission */
+
+/include/ "k3-pico-itx-qemu.dts"
+
+/ {
+    aliases {
+        mmc0 = &sdhci0;
+    };
+
+    sdh_io_clk: sdh-io-clock {
+        compatible = "fixed-clock";
+        #clock-cells = <0>;
+        clock-frequency = <52000000>;
+    };
+
+    sdh_core_clk: sdh-core-clock {
+        compatible = "fixed-clock";
+        #clock-cells = <0>;
+        clock-frequency = <52000000>;
+    };
+};
+
+&{/soc} {
+    sdhci0: mmc@d4280000 {
+        compatible = "spacemit,k3-sdhci";
+        reg = <0x0 0xd4280000 0x0 0x200>;
+        interrupt-parent = <&saplic>;
+        interrupts = <99 4>;
+        clocks = <&sdh_io_clk>, <&sdh_core_clk>;
+        clock-names = "io", "core";
+        clock-frequency = <52000000>;
+        bus-width = <4>;
+        broken-cd;
+        cap-sd-highspeed;
+        no-1-8-v;
+        no-mmc;
+        no-sdio;
+        sdh-phy-module = <0>;
+        status = "okay";
+    };
+};

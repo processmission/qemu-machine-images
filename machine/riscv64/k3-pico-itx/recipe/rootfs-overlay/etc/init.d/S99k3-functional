@@ -1,0 +1,9 @@
+#!/bin/sh
+
+cpu_count="$(grep -c '^processor' /proc/cpuinfo)"
+model="$(tr -d '\000' </proc/device-tree/model)"
+
+echo "K3-QEMU: model=${model}"
+echo "K3-QEMU: cpus=${cpu_count}"
+echo "K3-QEMU: Linux boot successful"
+echo "K3_LINUX_MVP_PASS"
