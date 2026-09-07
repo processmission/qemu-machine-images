@@ -18,7 +18,7 @@ target "buildroot" {
   inherits = ["_buildroot"]
 
   args = {
-    BUILDROOT_URL              = "https://gitee.com/phytium_embedded/phytium-linux-buildroot.git"
+    BUILDROOT_URL              = "https://github.com/processmission/phytium-linux-buildroot.git"
     BUILDROOT_REF              = "phytium-linux-buildroot_v2.4"
     BUILDROOT_DEFCONFIG        = "phytium_defconfig"
     BUILDROOT_CONFIG_FRAGMENTS = "configs/phytiumpi_sdcard.config"
