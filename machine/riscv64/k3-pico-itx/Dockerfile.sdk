@@ -1,0 +1,57 @@
+# syntax=docker/dockerfile:1.7
+
+FROM --platform=linux/amd64 ubuntu@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90 AS builder
+
+ARG TOOLCHAIN_URL=https://archive.spacemit.com/toolchain/spacemit-toolchain-linux-glibc-x86_64-v1.2.2.tar.xz
+ARG TOOLCHAIN_SHA256=a4bb97aba723ea642db9261d517cd98660404a4e42a37b2c3b86a3adc4ee78e9
+ARG JOBS=1
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        bc \
+        bison \
+        build-essential \
+        ca-certificates \
+        cpio \
+        device-tree-compiler \
+        dosfstools \
+        faketime \
+        file \
+        flex \
+        gdisk \
+        git \
+        libelf-dev \
+        libncurses-dev \
+        libssl-dev \
+        mtools \
+        python3 \
+        python3-pyelftools \
+        python3-setuptools \
+        rsync \
+        swig \
+        unzip \
+        wget \
+        xz-utils \
+    && wget -q "${TOOLCHAIN_URL}" -O /tmp/toolchain.tar.xz \
+    && echo "${TOOLCHAIN_SHA256}  /tmp/toolchain.tar.xz" | sha256sum -c - \
+    && mkdir -p /opt/spacemit-toolchain \
+    && tar -xJf /tmp/toolchain.tar.xz -C /opt/spacemit-toolchain \
+        --strip-components=1 \
+    && rm -f /tmp/toolchain.tar.xz \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PATH=/opt/spacemit-toolchain/bin:${PATH}
+ENV LC_ALL=C
+ENV TZ=UTC
+
+COPY machine/riscv64/k3-pico-itx/recipe/ /recipe/
+
+RUN --mount=type=cache,target=/work/dl,sharing=locked \
+    mkdir -p /dist /work \
+    && JOBS="${JOBS}" /recipe/scripts/build-in-container.sh
+
+FROM scratch AS export
+
+COPY --from=builder /dist/ /images/
