@@ -7,7 +7,7 @@ variable "CACHE_SCOPE" {
 }
 
 variable "BUILD_REVISION" {
-  default = "1"
+  default = "2"
 }
 
 group "release-components" {
