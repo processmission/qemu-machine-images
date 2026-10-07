@@ -3,7 +3,7 @@
 FROM microsemiproess/softconsole-headless-slim:7.0-2021.3 AS builder
 
 ARG HSS_URL=https://github.com/polarfire-soc/hart-software-services.git
-ARG HSS_REF=v2024.06
+ARG HSS_REF=v2026.04.1
 
 # The release build needs the eNVM image, not an FPGA programming bitstream.
 # Satisfy mpfsBootmodeProgrammer's unconditional fpgenprog check in dry-run mode.
@@ -25,7 +25,9 @@ COPY machine/riscv64/microchip-icicle-kit/0001-mpfs_hal-preserve-DDR-pattern-tes
 
 RUN git -C hss apply /tmp/hss.patch
 
+# Select the SoftConsole toolchain supplied by the builder image
 RUN cp hss/boards/mpfs-icicle-kit-es/def_config hss/.config && \
+    printf '\nCONFIG_CC_USE_SOFTCONSOLE=y\n' >> hss/.config && \
     make -C hss -j"$(nproc)" BOARD=mpfs-icicle-kit-es && \
     test -s hss/build/bootmode1/hss-envm-wrapper-bm1-p0.bin
 
