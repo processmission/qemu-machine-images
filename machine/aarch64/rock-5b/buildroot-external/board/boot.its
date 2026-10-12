@@ -1,0 +1,49 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+// Copyright (c) 2026 Process Mission
+
+/dts-v1/;
+
+/ {
+	description = "ROCK 5B Linux and initramfs";
+	#address-cells = <1>;
+	images {
+		kernel {
+			description = "Linux ARM64";
+			data = /incbin/("Image.lzma");
+			type = "kernel";
+			arch = "arm64";
+			os = "linux";
+			compression = "lzma";
+			load = <0x02000000>;
+			entry = <0x02000000>;
+			hash { algo = "sha256"; };
+		};
+		ramdisk {
+			description = "Buildroot initramfs";
+			data = /incbin/("rootfs.cpio.gz");
+			type = "ramdisk";
+			arch = "arm64";
+			os = "linux";
+			compression = "none";
+			load = <0x12180000>;
+			hash { algo = "sha256"; };
+		};
+		fdt {
+			description = "Radxa ROCK 5B";
+			data = /incbin/("rk3588-rock-5b.dtb");
+			type = "flat_dt";
+			arch = "arm64";
+			compression = "none";
+			load = <0x12000000>;
+			hash { algo = "sha256"; };
+		};
+	};
+	configurations {
+		default = "conf";
+		conf {
+			kernel = "kernel";
+			ramdisk = "ramdisk";
+			fdt = "fdt";
+		};
+	};
+};
