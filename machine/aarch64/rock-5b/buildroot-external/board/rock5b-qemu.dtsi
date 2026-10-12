@@ -1,0 +1,12 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+// Copyright (c) 2026 Process Mission
+
+&fit {
+	description = "FIT image for U-Boot";
+	configurations {
+		@config-SEQ {
+			fit,firmware = "u-boot";
+			/delete-property/ fit,loadables;
+		};
+	};
+};
