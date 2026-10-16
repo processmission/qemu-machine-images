@@ -1,0 +1,98 @@
+From: Chao Liu <chao.liu@processmission.com>
+Subject: [PATCH] riscv: dts: add a QEMU profile derived from CanMV K230
+
+Include the vendor's CanMV device tree and describe the CPU extensions,
+memory, interrupt controller and UART implemented by QEMU. Disable board
+peripherals that the machine does not expose to Linux.
+
+Signed-off-by: Chao Liu <chao.liu@processmission.com>
+---
+diff --git a/arch/riscv/boot/dts/canaan/k230-canmv-qemu.dts b/arch/riscv/boot/dts/canaan/k230-canmv-qemu.dts
+new file mode 100644
+--- /dev/null
++++ b/arch/riscv/boot/dts/canaan/k230-canmv-qemu.dts
+@@ -0,0 +1,84 @@
++// SPDX-License-Identifier: GPL-2.0 OR MIT
++#include "k230-canmv.dts"
++
++&ddr {
++	reg = <0x0 0x0 0x0 0x80000000>;
++};
++
++&{/cpus/cpu@0} {
++	riscv,isa = "rv64imafdc_zba_zbb_zbc_zbs_zicbom_zicboz_svpbmt";
++	riscv,isa-extensions = "i", "m", "a", "f", "d", "c", "zba", "zbb",
++			       "zbc", "zbs", "zicbom", "zicboz", "zicntr",
++			       "zicsr", "zifencei", "zihpm", "svpbmt";
++	/delete-property/ riscv,cbop-block-size;
++};
++
++&plic {
++	compatible = "sifive,plic-1.0.0";
++	#interrupt-cells = <1>;
++	interrupts-extended = <&cpu0_intc 0xffffffff>, <&cpu0_intc 9>;
++	riscv,ndev = <200>;
++};
++
++&clint {
++	compatible = "riscv,clint0";
++	clint,has-no-64bit-mmio;
++};
++
++&uart0 {
++	/delete-property/ clocks;
++	clock-frequency = <50000000>;
++	interrupts = <16>;
++};
++
++&{/soc} {
++	/delete-property/ dma-noncoherent;
++};
++
++&{/chosen} {
++	/delete-node/ opensbi-domains;
++};
++
++&{/pmu} { status = "disabled"; };
++&{/sound} { status = "disabled"; };
++&sysctl { status = "disabled"; };
++&uart1 { status = "disabled"; };
++&uart2 { status = "disabled"; };
++&uart3 { status = "disabled"; };
++&uart4 { status = "disabled"; };
++&usb0 { status = "disabled"; };
++&usb1 { status = "disabled"; };
++&mmc_sd0 { status = "disabled"; };
++&mmc_sd1 { status = "disabled"; };
++&gpio0 { status = "disabled"; };
++&gpio1 { status = "disabled"; };
++&i2c0 { status = "disabled"; };
++&i2c1 { status = "disabled"; };
++&i2c2 { status = "disabled"; };
++&i2c3 { status = "disabled"; };
++&i2c4 { status = "disabled"; };
++&watchdog1 { status = "disabled"; };
++&adc { status = "disabled"; };
++&pwm0_2 { status = "disabled"; };
++&pwm3_5 { status = "disabled"; };
++&rtc { status = "disabled"; };
++&spi0 { status = "disabled"; };
++&spi1 { status = "disabled"; };
++&spi2 { status = "disabled"; };
++&vpu { status = "disabled"; };
++&pdma { status = "disabled"; };
++&i2s { status = "disabled"; };
++&audio { status = "disabled"; };
++&inno_codec { status = "disabled"; };
++&gpu { status = "disabled"; };
++&isp { status = "disabled"; };
++&mipi0 { status = "disabled"; };
++&mipi1 { status = "disabled"; };
++&mipi2 { status = "disabled"; };
++&display { status = "disabled"; };
++&vo { status = "disabled"; };
++&dsi { status = "disabled"; };
++&gnne { status = "disabled"; };
++&ai2d { status = "disabled"; };
++&tsensor { status = "disabled"; };
++&security { status = "disabled"; };

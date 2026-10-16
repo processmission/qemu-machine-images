@@ -1,0 +1,59 @@
+# syntax=docker/dockerfile:1.7
+
+FROM --platform=linux/amd64 registry.gitlab.com/buildroot.org/buildroot/base:20250218.2110 AS builder
+
+ARG SDK_COMMIT=fc6cc2151d54cb307be47f81815023f7ffb0eae6
+ARG TOOLCHAIN_URL=https://download.kendryte.com/k230/downloads/dl/gcc/Xuantie-900-gcc-linux-6.6.0-glibc-x86_64-V3.0.2-20250410.tar.gz
+ARG TOOLCHAIN_SHA256=2215e1ffe1b9b9277b1f5af2f61102e83973163404f29b04da7097fdafa9e1b7
+ENV TMPDIR=/workspace/temporary
+ENV BR2_PRIMARY_SITE=https://sources.buildroot.net
+
+USER root
+RUN install -d -o br-user -g br-user /opt/k230_sdk /workspace/temporary \
+        /home/br-user/.buildroot-dl /recipe/patches \
+    && apt-get update \
+    && apt-get install --yes --no-install-recommends \
+        curl device-tree-compiler gawk libssl-dev python3-setuptools u-boot-tools \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl --fail --location --retry 3 -o /workspace/toolchain.tar.gz \
+        "${TOOLCHAIN_URL}" \
+    && echo "${TOOLCHAIN_SHA256}  /workspace/toolchain.tar.gz" | sha256sum -c - \
+    && mkdir -p /opt/toolchain \
+    && tar -xf /workspace/toolchain.tar.gz -C /opt/toolchain \
+    && rm /workspace/toolchain.tar.gz
+
+USER br-user
+WORKDIR /opt/k230_sdk
+RUN git init \
+    && git remote add origin https://github.com/kendryte/k230_linux_sdk.git \
+    && git fetch --depth 1 origin "${SDK_COMMIT}" \
+    && git checkout --detach FETCH_HEAD \
+    && test "$(git rev-parse HEAD)" = "${SDK_COMMIT}" \
+    && make k230_canmv_defconfig
+
+COPY --chown=br-user:br-user machine/riscv64/k230/recipe/configs/buildroot.config /recipe/configs/buildroot.config
+
+RUN cd output/buildroot-2025.02.1 \
+    && CONFIG_=BR2_ support/kconfig/merge_config.sh -m \
+        -O /opt/k230_sdk/output/k230_canmv_defconfig \
+        configs/k230_canmv_defconfig /recipe/configs/buildroot.config \
+    && make O=/opt/k230_sdk/output/k230_canmv_defconfig olddefconfig
+
+ARG JOBS=8
+RUN --mount=type=cache,id=k230-linux-sdk-dl,target=/home/br-user/.buildroot-dl,uid=1000,gid=1000,sharing=locked \
+    make BR2_DL_DIR=/home/br-user/.buildroot-dl BR2_JLEVEL="${JOBS}" toolchain busybox
+
+RUN --mount=type=cache,id=k230-linux-sdk-dl,target=/home/br-user/.buildroot-dl,uid=1000,gid=1000,sharing=locked \
+    make BR2_DL_DIR=/home/br-user/.buildroot-dl BR2_JLEVEL="${JOBS}" \
+        linux-depends uboot-depends host-cpio host-fakeroot
+
+COPY --chown=br-user:br-user machine/riscv64/k230/recipe/ /recipe/
+
+RUN --mount=type=cache,id=k230-linux-sdk-dl,target=/home/br-user/.buildroot-dl,uid=1000,gid=1000,sharing=locked \
+    make BR2_DL_DIR=/home/br-user/.buildroot-dl source
+
+RUN --mount=type=cache,id=k230-linux-sdk-dl,target=/home/br-user/.buildroot-dl,uid=1000,gid=1000,sharing=locked \
+    make BR2_DL_DIR=/home/br-user/.buildroot-dl BR2_JLEVEL="${JOBS}"
+
+FROM scratch AS export
+COPY --from=builder /opt/k230_sdk/output/k230_canmv_defconfig/images/ /images/
