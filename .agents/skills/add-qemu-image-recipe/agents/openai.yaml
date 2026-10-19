@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Process Mission
+# SPDX-License-Identifier: MIT
+interface:
+  display_name: "QEMU Image Recipe"
+  short_description: "Add QEMU image recipes using repository conventions"
+  default_prompt: "Use $add-qemu-image-recipe to add the requested QEMU
+    machine image recipe, follow the repository's maintainer requirements,
+    and validate its packaged boot images."
