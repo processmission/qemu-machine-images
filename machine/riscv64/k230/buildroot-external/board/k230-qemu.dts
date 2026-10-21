@@ -1,0 +1,76 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+// Copyright (c) 2026 Process Mission
+
+#include "canaan/k230.dtsi"
+
+/ {
+	model = "Canaan K230 QEMU";
+	/delete-node/ pmu;
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+		/delete-node/ opensbi-domains;
+	};
+
+	memory@0 {
+		device_type = "memory";
+		reg = <0 0 0 0x80000000>;
+	};
+
+	cpus {
+		timebase-frequency = <10000000>;
+
+		cpu@0 {
+			riscv,isa = "rv64imafdc_zba_zbb_zbc_zbs_zicbom_zicboz_svpbmt";
+			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
+					       "zba", "zbb", "zbc", "zbs", "zicbom",
+					       "zicboz", "zicntr", "zicsr", "zifencei",
+					       "zihpm", "svpbmt";
+			/delete-property/ riscv,cbop-block-size;
+		};
+	};
+};
+
+&clint {
+	compatible = "riscv,clint0";
+};
+
+&plic {
+	reg = <0xf 0 0 0x00400000>;
+	riscv,ndev = <200>;
+};
+
+&uart0 {
+	/delete-property/ clocks;
+	clock-frequency = <50000000>;
+	status = "okay";
+};
+
+&adc { status = "disabled"; };
+&ai2d { status = "disabled"; };
+&audio { status = "disabled"; };
+&display { status = "disabled"; };
+&dsi { status = "disabled"; };
+&gdma { status = "disabled"; };
+&gnne { status = "disabled"; };
+&gpio0 { status = "disabled"; };
+&gpio1 { status = "disabled"; };
+&gpu { status = "disabled"; };
+&i2s { status = "disabled"; };
+&inno_codec { status = "disabled"; };
+&iomux { status = "disabled"; };
+&isp { status = "disabled"; };
+&mipi0 { status = "disabled"; };
+&nonai2d { status = "disabled"; };
+&pdma { status = "disabled"; };
+&pmuiomux { status = "disabled"; };
+&pwm0_2 { status = "disabled"; };
+&pwm3_5 { status = "disabled"; };
+&rtc { status = "disabled"; };
+&security { status = "disabled"; };
+&sysctl { status = "disabled"; };
+&tsensor { status = "disabled"; };
+&v4l2isp { status = "disabled"; };
+&vo { status = "disabled"; };
+&vpu { status = "disabled"; };
+&watchdog1 { status = "disabled"; };
