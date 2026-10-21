@@ -1,0 +1,56 @@
+# syntax=docker/dockerfile:1.7
+
+FROM --platform=linux/amd64 ubuntu:22.04@sha256:0a9887931b0e38af2e3487ed39e29436b0535c4f3f52e57745baaf79d1898956 AS builder
+
+ARG SDK_COMMIT=fc6cc2151d54cb307be47f81815023f7ffb0eae6
+ARG TOOLCHAIN_URL=https://download.kendryte.com/k230/downloads/dl/gcc/Xuantie-900-gcc-linux-6.6.0-glibc-x86_64-V3.0.2-20250410.tar.gz
+ARG TOOLCHAIN_SHA256=2215e1ffe1b9b9277b1f5af2f61102e83973163404f29b04da7097fdafa9e1b7
+ARG BUILDROOT_EXTERNAL_PATHS=machine/riscv64/k230/buildroot-external
+ARG BUILDROOT_DEFCONFIG=k230_qemu_defconfig
+ARG BUILDROOT_CONFIG_FRAGMENTS
+ARG JOBS=8
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get -o Acquire::Retries=3 update \
+    && apt-get -o Acquire::Retries=3 install -y --no-install-recommends \
+        bc bison build-essential ca-certificates cpio curl file flex gawk git \
+        libelf-dev libncurses-dev libssl-dev patch python3 rsync unzip wget \
+        xz-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl --fail --location --retry 3 --output /toolchain.tar.gz \
+        "${TOOLCHAIN_URL}" \
+    && echo "${TOOLCHAIN_SHA256}  /toolchain.tar.gz" | sha256sum -c - \
+    && mkdir -p /opt/toolchain \
+    && tar -xzf /toolchain.tar.gz -C /opt/toolchain \
+    && rm /toolchain.tar.gz \
+    && useradd --create-home --uid 1000 builder \
+    && install -d -o builder -g builder /work/k230-sdk /work/dl /work/tmp
+
+ENV TMPDIR=/work/tmp
+ENV BR2_PRIMARY_SITE=https://sources.buildroot.net
+ENV LC_ALL=C
+ENV TZ=UTC
+
+USER builder
+WORKDIR /work/k230-sdk
+RUN git init -q \
+    && git remote add origin https://github.com/kendryte/k230_linux_sdk.git \
+    && git fetch -q --depth=1 origin "${SDK_COMMIT}" \
+    && git checkout -q --detach FETCH_HEAD \
+    && test "$(git rev-parse HEAD)" = "${SDK_COMMIT}"
+
+RUN --mount=type=bind,source=.,target=/context \
+    make CONF="${BUILDROOT_DEFCONFIG}" sync \
+    && /context/scripts/configure-buildroot.sh \
+        /work/k230-sdk/output/buildroot-2025.02.1 \
+        "/work/k230-sdk/output/${BUILDROOT_DEFCONFIG}" /context
+
+RUN --mount=type=cache,target=/work/dl,uid=1000,gid=1000,sharing=locked \
+    make -C "output/${BUILDROOT_DEFCONFIG}" all \
+        BR2_PRIMARY_SITE="${BR2_PRIMARY_SITE}" \
+        BR2_DL_DIR=/work/dl BR2_JLEVEL="${JOBS}"
+
+FROM scratch AS export
+ARG BUILDROOT_DEFCONFIG=k230_qemu_defconfig
+COPY --from=builder /work/k230-sdk/output/${BUILDROOT_DEFCONFIG}/images /images
