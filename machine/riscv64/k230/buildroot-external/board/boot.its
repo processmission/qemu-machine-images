@@ -1,0 +1,65 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026 Process Mission
+// SPDX-License-Identifier: MIT
+
+/dts-v1/;
+
+/ {
+    description = "K230 OpenSBI and Linux";
+    #address-cells = <1>;
+
+    images {
+        opensbi {
+            description = "OpenSBI";
+            data = /incbin/("fw_jump.bin");
+            type = "kernel";
+            arch = "riscv";
+            os = "linux";
+            compression = "none";
+            load = <0x08000000>;
+            entry = <0x08000000>;
+            hash { algo = "sha256"; };
+        };
+
+        linux {
+            description = "Linux";
+            data = /incbin/("Image");
+            type = "kernel";
+            arch = "riscv";
+            os = "linux";
+            compression = "none";
+            load = <0x08200000>;
+            hash { algo = "sha256"; };
+        };
+
+        fdt {
+            description = "K230 device tree";
+            data = /incbin/("k230-qemu.dtb");
+            type = "flat_dt";
+            arch = "riscv";
+            compression = "none";
+            load = <0x0a000000>;
+            hash { algo = "sha256"; };
+        };
+
+        ramdisk {
+            description = "BusyBox initramfs";
+            data = /incbin/("rootfs.cpio.gz");
+            type = "ramdisk";
+            arch = "riscv";
+            os = "linux";
+            compression = "none";
+            load = <0x10000000>;
+            hash { algo = "sha256"; };
+        };
+    };
+
+    configurations {
+        default = "boot";
+        boot {
+            kernel = "opensbi";
+            loadables = "linux";
+            fdt = "fdt";
+            ramdisk = "ramdisk";
+        };
+    };
+};
