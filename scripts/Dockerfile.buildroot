@@ -27,26 +27,9 @@ RUN git init buildroot && \
     git -C buildroot fetch --depth 1 origin "${BUILDROOT_REF}" && \
     git -C buildroot checkout --detach FETCH_HEAD
 
-RUN if [ -z "${BUILDROOT_CONFIG_FRAGMENTS}" ]; then \
-        make -C buildroot O=/workspace/output "${BUILDROOT_DEFCONFIG}"; \
-    else \
-        mkdir -p /workspace/output; \
-        set -- "configs/${BUILDROOT_DEFCONFIG}"; \
-        set -f; \
-        for fragment in ${BUILDROOT_CONFIG_FRAGMENTS}; do \
-            case "${fragment}" in \
-                -*|/*|.|..|../*|*/./*|*/../*|*/.|*/..|*[!A-Za-z0-9_./-]*) \
-                    echo "invalid Buildroot config fragment: ${fragment}" >&2; \
-                    exit 1; \
-                    ;; \
-            esac; \
-            test -r "buildroot/${fragment}" || \
-                { echo "Buildroot config fragment is not readable: ${fragment}" >&2; exit 1; }; \
-            set -- "$@" "${fragment}"; \
-        done; \
-        cd buildroot; \
-        ./support/kconfig/merge_config.sh -O /workspace/output "$@"; \
-    fi
+RUN --mount=type=bind,source=.,target=/context \
+    /context/scripts/configure-buildroot.sh \
+        /workspace/buildroot /workspace/output
 
 RUN --mount=type=cache,target=/home/br-user/.buildroot-dl,uid=1000,gid=1000,sharing=locked \
     make -C buildroot \
