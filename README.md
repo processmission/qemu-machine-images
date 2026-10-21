@@ -117,6 +117,65 @@ When fragments are present, the builder runs the tree's
 keeps the generated configuration in the normal out-of-tree output directory.
 Without fragments, the existing `make <defconfig>` behavior is unchanged.
 
+To add board configurations, packages, patches, or overlays from a
+[br2-external tree](https://buildroot.org/downloads/manual/manual.html#outside-br-custom),
+set the `BUILDROOT_EXTERNAL_PATHS` build argument to its path relative to this
+repository:
+
+```console
+docker buildx build \
+  --file scripts/Dockerfile.buildroot \
+  --build-arg BUILDROOT_EXTERNAL_PATHS=machine/riscv64/example/buildroot-external \
+  --build-arg BUILDROOT_DEFCONFIG=example_defconfig \
+  --output type=local,dest=output \
+  .
+```
+
+Each tree must contain `external.desc`, `Config.in`, and `external.mk`.
+Separate multiple local tree paths with a colon. Local trees are copied into
+the builder and registered in the specified order; a defconfig in a later tree
+overrides one with the same name in an earlier tree or in Buildroot. Use
+`BR2_EXTERNAL_<NAME>_PATH` in configuration files and make rules to reference
+files in a tree, where `<NAME>` comes from its `external.desc`.
+
+To use a vendor-maintained Git repository, set `BUILDROOT_EXTERNAL_URL` and
+`BUILDROOT_EXTERNAL_REF`. The revision is required and may be a commit, tag,
+or branch; use a full commit ID for reproducible builds. Set the optional
+`BUILDROOT_EXTERNAL_SUBDIR` when the external tree is below the repository
+root:
+
+```console
+docker buildx build \
+  --file scripts/Dockerfile.buildroot \
+  --build-arg BUILDROOT_EXTERNAL_URL=https://example.com/vendor/br2-external.git \
+  --build-arg BUILDROOT_EXTERNAL_REF=0123456789abcdef0123456789abcdef01234567 \
+  --build-arg BUILDROOT_EXTERNAL_SUBDIR=buildroot-external \
+  --build-arg BUILDROOT_DEFCONFIG=vendor_board_defconfig \
+  --output type=local,dest=output \
+  .
+```
+
+The complete vendor repository is checked out inside the builder, preserving
+files outside the selected subdirectory. A remote tree is registered before
+any local trees from `BUILDROOT_EXTERNAL_PATHS`, so local machine configurations
+can override vendor defaults. The same arguments can be passed in a machine's
+Docker Bake `args` map. Repository download and revision checkout failures stop
+configuration. The builder passes the resolved local directories to Buildroot
+through its native `BR2_EXTERNAL` variable.
+
+Configuration fragments are resolved relative to Buildroot first. If a path
+is absent there, external trees are searched, with the last matching tree
+taking precedence. The external trees remain available throughout the build,
+including package hooks and post-image scripts. Omitting both
+`BUILDROOT_EXTERNAL_PATHS` and `BUILDROOT_EXTERNAL_URL` keeps the existing build
+behavior.
+
+Run the configuration integration tests against an existing Buildroot source
+tree with `tests/buildroot-external.sh /path/to/buildroot`. These tests use
+real Buildroot configuration commands without compiling a target toolchain.
+Remote-source cases use local Git fixtures through `file://` URLs and do
+not require network access.
+
 For a component that is distributed only as a binary blob, `Dockerfile.blob`
 downloads it, verifies its SHA-256 digest, and exports it under the file
 name selected by the required `BLOB_FILENAME` argument:

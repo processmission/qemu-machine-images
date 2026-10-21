@@ -33,6 +33,25 @@ jobs:
           tests/select-pr-machines.sh
           tests/release-manifest.sh
 
+      - name: Test Buildroot external configuration
+        env:
+          BUILDROOT_TEST_VERSION: 2026.05
+          BUILDROOT_TEST_SHA256: 9d2f3af10fcac763a61ff6e41894a033f9ecf9267ba13dd0912eedcd3be2b22a
+        run: |
+          set -euo pipefail
+
+          test_root="$(mktemp -d "${RUNNER_TEMP}/buildroot-external.XXXXXXXX")"
+          trap 'rm -rf -- "${test_root}"' EXIT
+          curl --fail --location --retry 3 \
+            "https://buildroot.org/downloads/buildroot-${BUILDROOT_TEST_VERSION}.tar.xz" \
+            --output "${test_root}/buildroot.tar.xz"
+          printf '%s  %s\n' "${BUILDROOT_TEST_SHA256}" \
+            "${test_root}/buildroot.tar.xz" | sha256sum --check -
+          mkdir "${test_root}/source"
+          tar -xJf "${test_root}/buildroot.tar.xz" \
+            --strip-components=1 -C "${test_root}/source"
+          tests/buildroot-external.sh "${test_root}/source"
+
       - name: Validate version
         id: version
         run: |

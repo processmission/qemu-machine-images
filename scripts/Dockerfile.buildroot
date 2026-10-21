@@ -6,6 +6,10 @@ ARG BUILDROOT_URL=https://gitlab.com/buildroot.org/buildroot.git
 ARG BUILDROOT_REF=2026.05
 ARG BUILDROOT_DEFCONFIG
 ARG BUILDROOT_CONFIG_FRAGMENTS
+ARG BUILDROOT_EXTERNAL_PATHS
+ARG BUILDROOT_EXTERNAL_URL
+ARG BUILDROOT_EXTERNAL_REF
+ARG BUILDROOT_EXTERNAL_SUBDIR
 
 USER root
 RUN install -d -o br-user -g br-user \
@@ -29,7 +33,7 @@ RUN git init buildroot && \
 
 RUN --mount=type=bind,source=.,target=/context \
     /context/scripts/configure-buildroot.sh \
-        /workspace/buildroot /workspace/output
+        /workspace/buildroot /workspace/output /context
 
 RUN --mount=type=cache,target=/home/br-user/.buildroot-dl,uid=1000,gid=1000,sharing=locked \
     make -C buildroot \
